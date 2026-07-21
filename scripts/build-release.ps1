@@ -92,7 +92,7 @@ if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $installerPath)) {
 
 Invoke-CodeSign @($installerPath)
 
-$artifacts = @($installerPath, $agentPath, $senderPath)
+$artifacts = @($installerPath)
 $checksumLines = foreach ($artifact in $artifacts) {
     $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $artifact).Hash.ToLowerInvariant()
     '{0}  {1}' -f $hash, (Split-Path -Leaf $artifact)
