@@ -21,7 +21,7 @@ Before every real shutdown test:
 shutdown /a
 ```
 
-Use long timers first:
+For forced-shutdown negative testing, long timers are useful:
 
 ```cmd
 shutdown /s /t 120
@@ -36,6 +36,10 @@ shutdown /a
 Do not use forced shutdown flags such as `/f` during SWiT validation. Forced
 shutdown is for a different behavior class and can bypass or shorten normal app
 cleanup.
+
+Important: Microsoft documents that if `/t` is greater than zero, `/f` is
+implied. That means `shutdown /s /t 120` is not a normal veto test. It arrives
+as forced shutdown (`ENDSESSION_CRITICAL`) and SWiT's cancel may be ignored.
 
 ## Test Matrix
 
@@ -194,11 +198,12 @@ Pass criteria:
 - Allow signs out normally.
 - Logs include `WM_QUERYENDSESSION` and `WM_ENDSESSION`.
 
-## Level 5: Scheduled Shutdown Test
+## Level 5: Forced Shutdown Negative Test
 
-Goal: test real shutdown query while preserving an abort window.
+Goal: understand the command-line timer trap before trying the real veto path.
 
-Cancel-path test:
+This command has an abort window, but it also implies `/f` because `/t` is
+greater than zero:
 
 ```cmd
 shutdown /s /t 120
@@ -207,11 +212,10 @@ shutdown /s /t 120
 Expected:
 
 - SWiT receives `WM_QUERYENDSESSION`.
-- SWiT shows confirmation.
-- User chooses Cancel.
-- SWiT returns `FALSE`.
-- The system remains running.
-- Explorer, desktop, and ordinary helper apps remain open.
+- The reason flags include `ENDSESSION_CRITICAL`.
+- SWiT logs that cancel may be ignored.
+- Helper apps may also receive `WM_QUERYENDSESSION`.
+- The machine may shut down.
 
 If anything looks wrong:
 
@@ -219,22 +223,38 @@ If anything looks wrong:
 shutdown /a
 ```
 
-Allow-path test:
+Do not treat this as a failed early-veto test. It is a forced-shutdown test.
+
+## Level 6: Non-Forced Shutdown Veto Test
+
+Goal: test real cancel behavior without the `/t > 0` forced-shutdown path.
+
+Preparation:
+
+- Save all work.
+- Keep local physical access available.
+- Start SWiT in cancel mode.
+- Start `swit-helper.exe` at default `0x280`.
+
+Test:
 
 ```cmd
-shutdown /s /t 120
+shutdown /s /t 0
 ```
 
 Expected:
 
 - SWiT receives `WM_QUERYENDSESSION`.
-- User chooses Shutdown.
-- SWiT returns `TRUE`.
-- Windows proceeds with shutdown.
+- The reason flags do not include `ENDSESSION_CRITICAL`.
+- SWiT returns `FALSE`.
+- Windows aborts shutdown.
+- The helper does not receive `WM_QUERYENDSESSION`.
+- Explorer and desktop remain alive.
 
-Only run allow-path when you are ready for the machine to power off.
+This is riskier because there is no timer window. Run it only after the
+no-shutdown harness and helper tests are clean.
 
-## Level 6: Restart Test
+## Level 7: Restart Test
 
 Goal: verify restart is not accidentally treated as plain shutdown if the UI
 text claims to distinguish them.
@@ -242,7 +262,7 @@ text claims to distinguish them.
 Test:
 
 ```cmd
-shutdown /r /t 120
+shutdown /r /t 0
 ```
 
 Expected:
@@ -251,7 +271,7 @@ Expected:
 - Allow restarts.
 - UI text is generic unless SWiT can reliably identify restart.
 
-## Level 7: Start Menu Test
+## Level 8: Start Menu Test
 
 Goal: verify the real target workflow.
 
@@ -280,7 +300,7 @@ Pass criteria:
 - Cancel happens before Explorer/desktop black-screen teardown.
 - Confirm does not issue a second shutdown request from SWiT.
 
-## Level 8: Edge Cases
+## Level 9: Edge Cases
 
 Run these only after the basic path is stable:
 

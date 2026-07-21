@@ -124,6 +124,29 @@ const wchar_t* TestCommandName(WPARAM command) {
     }
 }
 
+std::wstring EndSessionReasonText(LPARAM reason) {
+    if (reason == 0) {
+        return L"none";
+    }
+
+    std::wstring text;
+    if ((reason & ENDSESSION_CLOSEAPP) != 0) {
+        text += L"CLOSEAPP ";
+    }
+    if ((reason & ENDSESSION_CRITICAL) != 0) {
+        text += L"CRITICAL ";
+    }
+    if ((reason & ENDSESSION_LOGOFF) != 0) {
+        text += L"LOGOFF ";
+    }
+    if (text.empty()) {
+        text = L"unknown";
+    } else if (text.back() == L' ') {
+        text.pop_back();
+    }
+    return text;
+}
+
 bool ConfigureShutdownOrder() {
     DWORD beforeLevel = 0;
     DWORD beforeFlags = 0;
@@ -167,9 +190,12 @@ bool CreateShutdownBlockReason(HWND hwnd) {
 }
 
 LRESULT HandleShutdownQuery(LPARAM reason) {
-    Log(L"WM_QUERYENDSESSION reason=0x%p decision=%ls",
-        reinterpret_cast<void*>(reason),
+    Log(L"WM_QUERYENDSESSION reason=0x%p flags=%ls decision=%ls",
+        reinterpret_cast<void*>(reason), EndSessionReasonText(reason).c_str(),
         g_cancel_on_query ? L"cancel" : L"allow");
+    if ((reason & ENDSESSION_CRITICAL) != 0 && g_cancel_on_query) {
+        Log(L"warning: ENDSESSION_CRITICAL is forced shutdown; cancel may be ignored");
+    }
     return g_cancel_on_query ? FALSE : TRUE;
 }
 
@@ -219,8 +245,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
         return HandleShutdownQuery(lparam);
 
     case WM_ENDSESSION:
-        Log(L"WM_ENDSESSION ending=%Iu reason=0x%p", static_cast<size_t>(wparam),
-            reinterpret_cast<void*>(lparam));
+        Log(L"WM_ENDSESSION ending=%Iu reason=0x%p flags=%ls",
+            static_cast<size_t>(wparam), reinterpret_cast<void*>(lparam),
+            EndSessionReasonText(lparam).c_str());
         return 0;
 
     default:

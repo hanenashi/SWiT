@@ -160,9 +160,11 @@ Tasks:
 
 Done when:
 
-- `shutdown /s /t 60` plus a cancel decision keeps the machine running.
+- The forced-shutdown negative test logs `ENDSESSION_CRITICAL`, proving why
+  timed `shutdown /t > 0` is not a valid veto test.
+- A non-forced shutdown request plus a cancel decision keeps the machine
+  running.
 - Explorer and ordinary test apps remain open after a cancel decision.
-- `shutdown /a` can abort scheduled test shutdowns before timeout.
 - Logs clearly show query, decision, and end-session results.
 
 ## Phase 6: Start Menu Validation

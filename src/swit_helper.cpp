@@ -165,6 +165,29 @@ const wchar_t* TestCommandName(WPARAM command) {
     }
 }
 
+std::wstring EndSessionReasonText(LPARAM reason) {
+    if (reason == 0) {
+        return L"none";
+    }
+
+    std::wstring text;
+    if ((reason & ENDSESSION_CLOSEAPP) != 0) {
+        text += L"CLOSEAPP ";
+    }
+    if ((reason & ENDSESSION_CRITICAL) != 0) {
+        text += L"CRITICAL ";
+    }
+    if ((reason & ENDSESSION_LOGOFF) != 0) {
+        text += L"LOGOFF ";
+    }
+    if (text.empty()) {
+        text = L"unknown";
+    } else if (text.back() == L' ') {
+        text.pop_back();
+    }
+    return text;
+}
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
     if (message == g_test_message) {
         Log(L"test message command=%ls(%Iu) value=0x%p", TestCommandName(wparam),
@@ -192,13 +215,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
         return 0;
 
     case WM_QUERYENDSESSION:
-        Log(L"WM_QUERYENDSESSION reason=0x%p returning TRUE",
-            reinterpret_cast<void*>(lparam));
+        Log(L"WM_QUERYENDSESSION reason=0x%p flags=%ls returning TRUE",
+            reinterpret_cast<void*>(lparam), EndSessionReasonText(lparam).c_str());
         return TRUE;
 
     case WM_ENDSESSION:
-        Log(L"WM_ENDSESSION ending=%Iu reason=0x%p", static_cast<size_t>(wparam),
-            reinterpret_cast<void*>(lparam));
+        Log(L"WM_ENDSESSION ending=%Iu reason=0x%p flags=%ls",
+            static_cast<size_t>(wparam), reinterpret_cast<void*>(lparam),
+            EndSessionReasonText(lparam).c_str());
         return 0;
 
     default:

@@ -82,6 +82,11 @@ Design implications:
 - Avoid complicated modal stacks.
 - Decide a timeout default before real shutdown tests.
 
+The command-line `shutdown` tool has an important trap: if `/t` is greater than
+zero, `/f` is implied. That sends applications a forced shutdown path
+(`ENDSESSION_CRITICAL`), where a SWiT cancel request may not be honored. Use
+that only as a negative test.
+
 ## Shutdown Levels
 
 Windows has a shutdown ordering concept for processes. A higher shutdown level
