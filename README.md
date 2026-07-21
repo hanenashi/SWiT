@@ -2,6 +2,22 @@
 
 SWiT is a small Windows 11 utility whose goal is to prevent accidental shutdowns.
 
+## TL;DR
+
+1. Download and run the current installer from [Releases](https://github.com/hanenashi/SWiT/releases).
+2. SWiT starts with Windows and lives in the notification area. Keep **Protection enabled** checked; right-click the icon to change protection, startup, or exit.
+
+<p>
+  <img src="assets/sysbar1.png" alt="SWiT notification-area icon showing protection enabled" width="410">
+  <img src="assets/sysbar2.png" alt="SWiT notification-area menu" width="410">
+</p>
+
+3. Shut down normally. When Windows shows the screen below, choose **Cancel** to keep working or **Shut down anyway** to proceed.
+
+<img src="assets/shutdown.png" alt="Windows shutdown screen blocked by SWiT with Shut down anyway and Cancel choices" width="820">
+
+## How It Works
+
 The intended behavior is:
 
 1. The user clicks **Start -> Power -> Shut down**.
