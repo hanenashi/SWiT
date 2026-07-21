@@ -41,7 +41,7 @@ Tasks:
   `WM_ENDSESSION`. Done.
 - Add a custom registered test message that exercises the same decision path
   without asking Windows to shut down. Done.
-- Add command-line flags. Started:
+- Add command-line flags. Done:
   - `--test-mode`
   - `--allow-on-query`
   - `--cancel-on-query`
@@ -55,8 +55,9 @@ Done when:
   Windows session.
 - Logs are timestamped and readable.
 
-Current status: completed for no-shutdown smoke testing. Real shutdown testing
-still waits for helper-app ordering checks.
+Current status: completed for no-shutdown smoke testing. The early-priority
+veto and native blocker UI have passed a real Start-menu cancel test on
+Kurochan without ordinary applications beginning teardown.
 
 ## Phase 2: Shutdown Decision Core
 
@@ -152,11 +153,10 @@ Tasks:
 
 - Register a short shutdown block reason with `ShutdownBlockReasonCreate`.
 - Set an application-first shutdown level before real shutdown tests.
-- On `WM_QUERYENDSESSION`, show confirmation only when safe.
-- Return `FALSE` for cancel.
-- Return `TRUE` for confirm and let the original shutdown continue.
+- On `WM_QUERYENDSESSION`, return `FALSE` immediately. Done.
+- Use Windows' native blocker screen for **Shut down anyway / Cancel**. Done.
 - Handle `WM_ENDSESSION` only for cleanup/logging.
-- Never call `ExitWindowsEx` from inside the normal confirm path.
+- Never call `ExitWindowsEx` from the query handler.
 
 Done when:
 
@@ -167,6 +167,9 @@ Done when:
 - Explorer and ordinary test apps remain open after a cancel decision.
 - Logs clearly show query, decision, and end-session results.
 
+Current status: protected cancel path complete. The allow/force-through path
+remains intentionally untested because it shuts down the machine.
+
 ## Phase 6: Start Menu Validation
 
 Goal: verify the real target workflow.
@@ -174,7 +177,7 @@ Goal: verify the real target workflow.
 Tasks:
 
 - Test Start -> Power -> Shut down manually.
-- Test cancel.
+- Test cancel. Done.
 - Test confirm.
 - Test restart and logoff separately.
 - Test while common apps have unsaved work.
@@ -182,9 +185,9 @@ Tasks:
 
 Done when:
 
-- Start-menu shutdown produces the intended SWiT prompt.
-- Cancel keeps the Windows session alive.
-- Confirm proceeds without launching a second shutdown request.
+- Start-menu shutdown produces the Windows blocker screen with SWiT's reason.
+- Cancel keeps the Windows session and ordinary applications alive. Done.
+- Shut down anyway proceeds without SWiT launching a second request.
 
 ## Phase 7: Packaging
 

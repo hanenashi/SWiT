@@ -13,6 +13,7 @@ Shutdown tests are destructive to the current session. Use this order:
 Before every real shutdown test:
 
 - Save all work.
+- Run SWiT and its helper from a normal, non-elevated terminal.
 - Keep a local console path available, not only SSH or phone control.
 - Make sure the repo has no unsaved editor buffer state.
 - Keep this command ready in an elevated or normal terminal:
@@ -60,6 +61,17 @@ Suggested result states:
 - `FAIL_DANGEROUS`: shutdown happened when cancel was expected.
 - `BLOCKED`: test could not be completed.
 
+## Recorded Results
+
+Kurochan, 2026-07-21, Start-menu shutdown, native-screen build: `PASS`.
+
+- Agent level changed from `0x280` to `0x3FF`.
+- Agent returned `FALSE` for a non-critical query.
+- Windows followed with `WM_ENDSESSION ending=0` about seven seconds later.
+- Default-level helper received no `WM_QUERYENDSESSION`.
+- Codex, Total Commander, and browser audio remained running.
+- No delayed SWiT dialog appeared after returning to the desktop.
+
 ## Level 1: No-Shutdown Tests
 
 Goal: test logic without invoking Windows shutdown.
@@ -88,22 +100,19 @@ Tests:
 
 - Start app in `--test-mode`.
 - Verify hidden window is created.
-- Verify tray icon appears.
-- Right-click tray menu opens.
-- Settings dialog opens and saves values.
-- About placeholder opens.
-- Donate placeholder opens.
-- Close App removes tray icon and exits.
 - Synthetic `WM_APP` test message triggers the same decision function used by
   shutdown handling.
-- Cancel decision returns `CancelShutdown`.
-- Confirm decision returns `AllowShutdown`.
-- Timeout decision follows settings.
+- Block mode logs `decision=cancel` without showing UI.
+- Allow mode logs `decision=allow` without showing UI.
+- `swit-send.exe exit` closes the agent cleanly.
+- Logs are readable while the agent is still running.
 
 Pass criteria:
 
 - No real shutdown or logoff occurs.
 - Logs show every decision.
+- `type logs\smoke.log` works while the agent is still running and begins with
+  `[` rather than a UTF-8 BOM artifact.
 
 ## Level 2: Message-Only Harness
 
@@ -123,7 +132,7 @@ Tests:
 Pass criteria:
 
 - Decisions are deterministic.
-- Repeated messages do not spawn stacked dialogs.
+- Repeated messages remain deterministic and do not show UI.
 - Unknown values fall back to the safest configured behavior.
 
 ## Level 3: ShutdownBlockReason Smoke Test
@@ -188,7 +197,7 @@ Preparation:
 Tests:
 
 - Trigger sign out from Start menu.
-- Choose Cancel in SWiT.
+- Choose Cancel in Windows' blocker UI.
 - Confirm the session remains alive.
 - Repeat and choose Allow.
 
@@ -247,7 +256,8 @@ Expected:
 - SWiT receives `WM_QUERYENDSESSION`.
 - The reason flags do not include `ENDSESSION_CRITICAL`.
 - SWiT returns `FALSE`.
-- Windows aborts shutdown.
+- Windows shows its native blocker UI with SWiT's reason.
+- Choosing Cancel aborts shutdown.
 - The helper does not receive `WM_QUERYENDSESSION`.
 - Explorer and desktop remain alive.
 
@@ -280,7 +290,7 @@ Cancel-path test:
 1. Save all work.
 2. Start SWiT with verbose logging.
 3. Use Start -> Power -> Shut down.
-4. Choose Cancel in SWiT.
+4. Choose Cancel in Windows' blocker UI.
 5. Confirm the session remains usable.
 6. Check logs.
 
@@ -289,16 +299,16 @@ Allow-path test:
 1. Save all work.
 2. Start SWiT with verbose logging.
 3. Use Start -> Power -> Shut down.
-4. Choose Shutdown in SWiT.
+4. Choose Shut down anyway in Windows' blocker UI.
 5. Confirm the machine shuts down cleanly.
 
 Pass criteria:
 
-- Start-menu shutdown triggers the same decision path as the scheduled shutdown
-  test.
+- Start-menu shutdown shows SWiT's reason in Windows' blocker UI.
 - Cancel does not require racing `shutdown /a`.
-- Cancel happens before Explorer/desktop black-screen teardown.
-- Confirm does not issue a second shutdown request from SWiT.
+- Cancel preserves Explorer and ordinary applications even though Windows
+  temporarily shows its full-screen shutdown UI.
+- Shut down anyway does not depend on a second shutdown request from SWiT.
 
 ## Level 9: Edge Cases
 
@@ -308,7 +318,7 @@ Run these only after the basic path is stable:
 - Explorer restarted while SWiT is running.
 - SWiT started twice.
 - Settings dialog open when shutdown begins.
-- Confirmation dialog already open and a second shutdown request occurs.
+- A second shutdown request occurs immediately after a canceled request.
 - Remote session attached.
 - Machine locked.
 - Unsaved Notepad window open.
@@ -321,6 +331,7 @@ Run these only after the basic path is stable:
 
 Every build must preserve a way to disable SWiT:
 
+- `build\swit-send.exe exit` during the trayless MVP.
 - Close App from tray menu.
 - Task Manager process end.
 - Startup entry removal.

@@ -6,34 +6,28 @@ The intended behavior is:
 
 1. The user clicks **Start -> Power -> Shut down**.
 2. Windows begins ending the interactive session.
-3. SWiT receives the shutdown query in the logged-in user's session.
-4. SWiT asks for confirmation.
-5. If the user cancels, SWiT cancels the shutdown.
-6. If the user confirms, SWiT allows Windows to continue shutting down.
+3. SWiT receives the shutdown query before ordinary applications.
+4. SWiT immediately blocks the request with a clear reason.
+5. Windows shows its native **Shut down anyway / Cancel** screen.
+6. Cancel preserves the session; Shut down anyway continues forcefully.
 
 ## Current Status
 
-This repository is being restarted. The existing files include several early
-experiments:
-
-- A hidden-window app that handles `WM_QUERYENDSESSION`.
-- A Windows service that attempts to handle preshutdown and launch a GUI prompt.
-- A hook DLL experiment that tries to intercept Start menu or shell messages.
-
-Those experiments are archived under `archive/2026-07-21-pre-restart/` as
-research material. The clean implementation should be built around a normal
-per-user background app with a hidden top-level window and message loop.
+The clean implementation now has a per-user agent, an application-first
+shutdown level, a native Windows confirmation flow, logging, and synthetic test
+tools. The older hidden-window, service, and hook experiments remain archived
+under `archive/2026-07-21-pre-restart/` as research material.
 
 ## Design Direction
 
 Preferred architecture:
 
 - `swit-agent.exe`: per-user background process started at sign-in.
-- Hidden message-only/control window for shutdown notifications.
+- Hidden top-level window for shutdown notifications.
 - `WM_QUERYENDSESSION` handler decides whether to block the shutdown.
 - `ShutdownBlockReasonCreate` provides the visible reason Windows shows when
   shutdown is blocked.
-- A small foreground confirmation dialog is used when practical.
+- Windows' full-screen blocker UI is the confirmation surface.
 - Optional tray icon later for settings, enable/disable, and logs.
 
 Avoid as the primary design:
@@ -94,6 +88,14 @@ build\swit-send.exe restart
 build\swit-send.exe logoff
 build\swit-send.exe exit
 ```
+
+Normal startup blocks shutdown and relies on Windows' native confirmation UI.
+`--cancel-on-query` explicitly selects the same behavior, while
+`--allow-on-query` is a diagnostic mode. `swit-send.exe exit` remains available
+in normal mode as the recovery command while the tray menu is not implemented.
+
+Run SWiT as the signed-in user, not from an elevated terminal. Elevation is not
+required and prevents a normal `swit-send.exe` process from controlling it.
 
 If you start the executables from inside `build\`, use `swit-send.exe` directly
 and pass an absolute or `..\logs\...` log path if you want logs under the repo

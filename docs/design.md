@@ -23,9 +23,9 @@ Build a per-user Win32 app:
    level so SWiT is queried before Explorer and ordinary apps.
 5. Handle `WM_QUERYENDSESSION`.
 6. If protection is enabled:
-   - call `ShutdownBlockReasonCreate`;
-   - show a short confirmation prompt if Windows still permits UI;
-   - return `FALSE` when the user cancels or does not explicitly confirm.
+   - register a clear reason with `ShutdownBlockReasonCreate`;
+   - return `FALSE` immediately;
+   - let Windows show its native **Shut down anyway / Cancel** screen.
 7. Handle `WM_ENDSESSION` for cleanup and logging.
 
 This should catch the normal Start menu shutdown path because that path asks
@@ -58,12 +58,19 @@ source experiments are archived under `archive/2026-07-21-pre-restart/`.
 The old `swit.cpp` approach is closest to the clean design. It already uses a
 hidden window, `WM_QUERYENDSESSION`, and `WTSRegisterSessionNotification`.
 
+The clean agent reuses the legacy veto mechanism at shutdown level `0x3FF`, but
+does not reuse its modal confirmation or run the legacy binary as a second
+blocker.
+
 Problems to revisit:
 
 - It calls `ExitWindowsEx` after confirmation, which may create a second
   shutdown request instead of simply allowing the original one to continue.
-- It uses a modal `MessageBox` directly inside the shutdown query handler.
-- It needs clearer timeout and fallback behavior.
+  The clean agent never starts a second shutdown request.
+- A modal `MessageBox` inside `WM_QUERYENDSESSION` was tested on 2026-07-21. It
+  remained hidden behind Windows' shutdown UI and became visible only after the
+  session had already been canceled.
+- The clean agent therefore responds immediately and uses Windows' blocker UI.
 
 ### Service Plus GUI
 

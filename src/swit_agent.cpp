@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cwchar>
+#include <share.h>
 #include <string>
 
 #include "swit_protocol.h"
@@ -14,8 +15,23 @@ constexpr DWORD kSwitShutdownFlags = 0;
 HINSTANCE g_instance = nullptr;
 HWND g_window = nullptr;
 UINT g_test_message = 0;
-bool g_cancel_on_query = true;
 FILE* g_log = nullptr;
+bool g_test_mode = false;
+bool g_block_reason_created = false;
+
+enum class QueryMode {
+    Block,
+    Allow,
+};
+
+enum class EndSessionKind {
+    Unknown,
+    Shutdown,
+    Restart,
+    Logoff,
+};
+
+QueryMode g_query_mode = QueryMode::Block;
 
 std::wstring NowText() {
     SYSTEMTIME st{};
@@ -60,14 +76,25 @@ void Log(const wchar_t* format, ...) {
         return;
     }
 
-    fwprintf(g_log, L"[%ls] ", NowText().c_str());
-
+    wchar_t message[2048]{};
     va_list args;
     va_start(args, format);
-    vfwprintf(g_log, format, args);
+    _vsnwprintf_s(message, _countof(message), _TRUNCATE, format, args);
     va_end(args);
 
-    fwprintf(g_log, L"\n");
+    std::wstring line = L"[" + NowText() + L"] " + message + L"\r\n";
+    int byteCount = WideCharToMultiByte(CP_UTF8, 0, line.c_str(),
+                                        static_cast<int>(line.size()), nullptr,
+                                        0, nullptr, nullptr);
+    if (byteCount <= 0) {
+        return;
+    }
+
+    std::string utf8(static_cast<size_t>(byteCount), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, line.c_str(),
+                        static_cast<int>(line.size()), &utf8[0], byteCount,
+                        nullptr, nullptr);
+    fwrite(utf8.data(), 1, utf8.size(), g_log);
     fflush(g_log);
 }
 
@@ -103,8 +130,8 @@ bool EnsureParentDirectory(const std::wstring& path) {
 
 bool OpenLog(const std::wstring& path) {
     EnsureParentDirectory(path);
-    errno_t err = _wfopen_s(&g_log, path.c_str(), L"a, ccs=UTF-8");
-    return err == 0 && g_log != nullptr;
+    g_log = _wfsopen(path.c_str(), L"ab", _SH_DENYWR);
+    return g_log != nullptr;
 }
 
 const wchar_t* TestCommandName(WPARAM command) {
@@ -122,6 +149,30 @@ const wchar_t* TestCommandName(WPARAM command) {
     default:
         return L"UNKNOWN";
     }
+}
+
+const wchar_t* QueryModeName(QueryMode mode) {
+    switch (mode) {
+    case QueryMode::Block:
+        return L"block";
+    case QueryMode::Allow:
+        return L"allow";
+    }
+    return L"unknown";
+}
+
+const wchar_t* EndSessionKindName(EndSessionKind kind) {
+    switch (kind) {
+    case EndSessionKind::Shutdown:
+        return L"shutdown";
+    case EndSessionKind::Restart:
+        return L"restart";
+    case EndSessionKind::Logoff:
+        return L"logoff";
+    case EndSessionKind::Unknown:
+        return L"shutdown-or-restart";
+    }
+    return L"unknown";
 }
 
 std::wstring EndSessionReasonText(LPARAM reason) {
@@ -179,8 +230,12 @@ bool ConfigureShutdownOrder() {
 }
 
 bool CreateShutdownBlockReason(HWND hwnd) {
-    if (ShutdownBlockReasonCreate(hwnd, L"SWiT is waiting for shutdown confirmation.")) {
+    if (ShutdownBlockReasonCreate(
+            hwnd,
+            L"SWiT caught this session-end request. Choose Cancel to keep "
+            L"working, or continue anyway to proceed.")) {
         Log(L"ShutdownBlockReasonCreate succeeded");
+        g_block_reason_created = true;
         return true;
     }
 
@@ -189,26 +244,51 @@ bool CreateShutdownBlockReason(HWND hwnd) {
     return false;
 }
 
+bool DecideShutdown() {
+    return g_query_mode == QueryMode::Allow;
+}
+
 LRESULT HandleShutdownQuery(LPARAM reason) {
-    Log(L"WM_QUERYENDSESSION reason=0x%p flags=%ls decision=%ls",
+    bool allow = DecideShutdown();
+
+    Log(L"WM_QUERYENDSESSION reason=0x%p flags=%ls mode=%ls decision=%ls",
         reinterpret_cast<void*>(reason), EndSessionReasonText(reason).c_str(),
-        g_cancel_on_query ? L"cancel" : L"allow");
-    if ((reason & ENDSESSION_CRITICAL) != 0 && g_cancel_on_query) {
+        QueryModeName(g_query_mode), allow ? L"allow" : L"cancel");
+    if ((reason & ENDSESSION_CRITICAL) != 0 && !allow) {
         Log(L"warning: ENDSESSION_CRITICAL is forced shutdown; cancel may be ignored");
     }
-    return g_cancel_on_query ? FALSE : TRUE;
+    return allow ? TRUE : FALSE;
 }
 
 void HandleTestMessage(WPARAM command, LPARAM value) {
     Log(L"test message command=%ls(%Iu) value=0x%p", TestCommandName(command),
         static_cast<size_t>(command), reinterpret_cast<void*>(value));
 
+    bool isSyntheticQuery = command == SWIT_TEST_QUERY_SHUTDOWN ||
+                            command == SWIT_TEST_QUERY_RESTART ||
+                            command == SWIT_TEST_QUERY_LOGOFF;
+    if (isSyntheticQuery && !g_test_mode) {
+        Log(L"ignoring synthetic query because --test-mode is not enabled");
+        return;
+    }
+
     switch (command) {
     case SWIT_TEST_QUERY_SHUTDOWN:
     case SWIT_TEST_QUERY_RESTART:
-    case SWIT_TEST_QUERY_LOGOFF:
-        Log(L"synthetic query decision=%ls", g_cancel_on_query ? L"cancel" : L"allow");
+    case SWIT_TEST_QUERY_LOGOFF: {
+        EndSessionKind kind = EndSessionKind::Shutdown;
+        if (command == SWIT_TEST_QUERY_RESTART) {
+            kind = EndSessionKind::Restart;
+        } else if (command == SWIT_TEST_QUERY_LOGOFF) {
+            kind = EndSessionKind::Logoff;
+        }
+
+        bool allow = DecideShutdown();
+        Log(L"synthetic query kind=%ls mode=%ls decision=%ls",
+            EndSessionKindName(kind), QueryModeName(g_query_mode),
+            allow ? L"allow" : L"cancel");
         break;
+    }
     case SWIT_TEST_EXIT:
         Log(L"test requested exit");
         PostQuitMessage(0);
@@ -227,7 +307,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
     switch (message) {
     case WM_CREATE:
         Log(L"WM_CREATE hwnd=0x%p", hwnd);
-        CreateShutdownBlockReason(hwnd);
+        if (g_query_mode == QueryMode::Block) {
+            if (!CreateShutdownBlockReason(hwnd)) {
+                return -1;
+            }
+        } else {
+            Log(L"shutdown block reason disabled in allow mode");
+        }
         return 0;
 
     case WM_CLOSE:
@@ -237,7 +323,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
 
     case WM_DESTROY:
         Log(L"WM_DESTROY");
-        ShutdownBlockReasonDestroy(hwnd);
+        if (g_block_reason_created) {
+            ShutdownBlockReasonDestroy(hwnd);
+            g_block_reason_created = false;
+        }
         PostQuitMessage(0);
         return 0;
 
@@ -316,9 +405,19 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         logPath = DefaultLogPath();
     }
 
-    g_cancel_on_query = !HasArg(argc, argv, L"--allow-on-query");
-    if (HasArg(argc, argv, L"--cancel-on-query")) {
-        g_cancel_on_query = true;
+    g_test_mode = HasArg(argc, argv, L"--test-mode");
+    bool cancelOnQuery = HasArg(argc, argv, L"--cancel-on-query");
+    bool allowOnQuery = HasArg(argc, argv, L"--allow-on-query");
+    if (cancelOnQuery && allowOnQuery) {
+        if (argv != nullptr) {
+            LocalFree(argv);
+        }
+        return 2;
+    }
+    if (cancelOnQuery) {
+        g_query_mode = QueryMode::Block;
+    } else if (allowOnQuery) {
+        g_query_mode = QueryMode::Allow;
     }
 
     if (!OpenLog(logPath)) {
@@ -330,7 +429,8 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
 
     Log(L"SWiT agent starting");
     Log(L"log path=%ls", logPath.c_str());
-    Log(L"query default=%ls", g_cancel_on_query ? L"cancel" : L"allow");
+    Log(L"test mode=%u", g_test_mode ? 1u : 0u);
+    Log(L"query mode=%ls", QueryModeName(g_query_mode));
 
     g_test_message = RegisterWindowMessageW(SWIT_TEST_MESSAGE_NAME);
     if (g_test_message == 0) {
@@ -343,7 +443,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     Log(L"registered test message id=%u", g_test_message);
 
     bool shutdownOrderOk = ConfigureShutdownOrder();
-    if (!RegisterWindowClass() || !CreateAgentWindow()) {
+    if (!shutdownOrderOk || !RegisterWindowClass() || !CreateAgentWindow()) {
+        if (!shutdownOrderOk) {
+            Log(L"fatal: application-first shutdown order is required");
+        }
         if (argv != nullptr) {
             LocalFree(argv);
         }
