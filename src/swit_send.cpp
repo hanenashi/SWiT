@@ -29,20 +29,32 @@ unsigned int ParseCommand(const wchar_t* value) {
 } // namespace
 
 int wmain(int argc, wchar_t** argv) {
-    if (argc != 2) {
-        std::wcerr << L"Usage: swit-send <ping|shutdown|restart|logoff|exit>\n";
+    if (argc < 2 || argc > 3) {
+        std::wcerr << L"Usage: swit-send [--helper] <ping|shutdown|restart|logoff|exit>\n";
         return 2;
     }
 
-    unsigned int command = ParseCommand(argv[1]);
+    bool helper = false;
+    const wchar_t* commandArg = argv[1];
+    if (argc == 3) {
+        if (wcscmp(argv[1], L"--helper") != 0) {
+            std::wcerr << L"Unsupported option: " << argv[1] << L"\n";
+            return 2;
+        }
+        helper = true;
+        commandArg = argv[2];
+    }
+
+    unsigned int command = ParseCommand(commandArg);
     if (command == 0) {
-        std::wcerr << L"Unsupported command: " << argv[1] << L"\n";
+        std::wcerr << L"Unsupported command: " << commandArg << L"\n";
         return 2;
     }
 
-    HWND window = FindWindowW(SWIT_WINDOW_CLASS, nullptr);
+    HWND window = FindWindowW(helper ? SWIT_HELPER_WINDOW_CLASS : SWIT_WINDOW_CLASS, nullptr);
     if (window == nullptr) {
-        std::wcerr << L"SWiT agent window not found\n";
+        std::wcerr << (helper ? L"SWiT helper window not found\n"
+                              : L"SWiT agent window not found\n");
         return 1;
     }
 
@@ -57,6 +69,6 @@ int wmain(int argc, wchar_t** argv) {
         return 1;
     }
 
-    std::wcout << L"sent " << argv[1] << L"\n";
+    std::wcout << L"sent " << commandArg << (helper ? L" to helper\n" : L"\n");
     return 0;
 }

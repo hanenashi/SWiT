@@ -22,5 +22,9 @@ cl.exe /nologo /DUNICODE /D_UNICODE /EHsc /W4 /permissive- ^
     /Fobuild\swit_send.obj /Febuild\swit-send.exe ^
     src\swit_send.cpp user32.lib || exit /b 1
 
-echo Built build\swit-agent.exe and build\swit-send.exe
+cl.exe /nologo /DUNICODE /D_UNICODE /EHsc /W4 /permissive- ^
+    /Fobuild\swit_helper.obj /Febuild\swit-helper.exe ^
+    src\swit_helper.cpp user32.lib shell32.lib || exit /b 1
+
+echo Built build\swit-agent.exe, build\swit-send.exe, and build\swit-helper.exe
 popd

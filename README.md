@@ -81,9 +81,10 @@ Outputs:
 ```text
 build\swit-agent.exe
 build\swit-send.exe
+build\swit-helper.exe
 ```
 
-Run the no-shutdown smoke harness:
+Run the no-shutdown smoke harness from the repository root:
 
 ```cmd
 build\swit-agent.exe --test-mode --cancel-on-query --log logs\smoke.log
@@ -92,6 +93,21 @@ build\swit-send.exe shutdown
 build\swit-send.exe restart
 build\swit-send.exe logoff
 build\swit-send.exe exit
+```
+
+If you start the executables from inside `build\`, use `swit-send.exe` directly
+and pass an absolute or `..\logs\...` log path if you want logs under the repo
+root.
+
+Run the ordering helper:
+
+```cmd
+build\swit-helper.exe --log logs\helper-default.log
+build\swit-send.exe --helper ping
+build\swit-send.exe --helper exit
+
+build\swit-helper.exe --level 0x180 --log logs\helper-late.log
+build\swit-send.exe --helper exit
 ```
 
 ## Legacy Notes

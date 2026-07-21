@@ -77,6 +77,9 @@ build\swit-send.exe logoff
 build\swit-send.exe exit
 ```
 
+Run from the repository root. If you run from `build\`, use `swit-send.exe`
+directly and write logs to `..\logs\...` or an absolute path.
+
 Tests:
 
 - Start app in `--test-mode`.
@@ -147,9 +150,20 @@ Tests:
 - On startup, call `GetProcessShutdownParameters` and log the default level.
 - Call `SetProcessShutdownParameters(0x3FF, 0)`.
 - Call `GetProcessShutdownParameters` again and verify the level changed.
-- Run one helper GUI app at default level `0x280`.
-- Run one helper GUI app at an explicit later level such as `0x180`.
-- Trigger only the synthetic test path first and confirm logged ordering.
+- Run one helper GUI app at default level `0x280`:
+
+```cmd
+build\swit-helper.exe --log logs\helper-default.log
+build\swit-send.exe --helper ping
+build\swit-send.exe --helper exit
+```
+
+- Run one helper GUI app at an explicit later level such as `0x180`:
+
+```cmd
+build\swit-helper.exe --level 0x180 --log logs\helper-late.log
+build\swit-send.exe --helper exit
+```
 
 Pass criteria:
 

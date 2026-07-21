@@ -1,6 +1,7 @@
 #pragma once
 
 #define SWIT_WINDOW_CLASS L"SWiT.Agent.Window"
+#define SWIT_HELPER_WINDOW_CLASS L"SWiT.Helper.Window"
 #define SWIT_TEST_MESSAGE_NAME L"SWiT.Agent.TestMessage"
 
 enum SwitTestCommand : unsigned int {

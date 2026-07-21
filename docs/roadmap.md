@@ -79,6 +79,26 @@ Done when:
 - Countdown behavior is predictable.
 - Both buttons and timeout paths are testable without a real shutdown.
 
+## Phase 2A: Ordering Helper
+
+Goal: prove that real shutdown tests can detect whether SWiT vetoes before
+ordinary apps are asked to quit.
+
+Tasks:
+
+- Create `swit-helper.exe`. Done.
+- Log default shutdown level `0x280`. Done.
+- Support explicit helper shutdown level such as `0x180`. Done.
+- Support synthetic ping/exit through `swit-send.exe --helper`. Done.
+- During the first cancel-path real shutdown test, run the helper and verify it
+  does not receive `WM_QUERYENDSESSION` before SWiT cancels.
+
+Done when:
+
+- Helper starts and exits cleanly.
+- Helper logs its configured shutdown level.
+- Real cancel-path test leaves helper running and its log has no shutdown query.
+
 ## Phase 3: Tray App MVP
 
 Goal: restore the original product shape safely.
