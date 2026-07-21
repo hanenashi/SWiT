@@ -121,6 +121,25 @@ Pass criteria:
 - Normal path succeeds.
 - Wrong-thread path fails predictably and does not crash.
 
+## Level 3A: Shutdown Order Smoke Test
+
+Goal: verify SWiT will be queried before ordinary apps.
+
+Tests:
+
+- On startup, call `GetProcessShutdownParameters` and log the default level.
+- Call `SetProcessShutdownParameters(0x3FF, 0)`.
+- Call `GetProcessShutdownParameters` again and verify the level changed.
+- Run one helper GUI app at default level `0x280`.
+- Run one helper GUI app at an explicit later level such as `0x180`.
+- Trigger only the synthetic test path first and confirm logged ordering.
+
+Pass criteria:
+
+- SWiT logs shutdown level `0x3FF`.
+- Helper apps remain ordinary or later priority.
+- The real-shutdown test plan does not proceed until this is confirmed.
+
 ## Level 4: Logoff Test
 
 Goal: test session-ending behavior with less disruption than power-off.
@@ -161,6 +180,7 @@ Expected:
 - User chooses Cancel.
 - SWiT returns `FALSE`.
 - The system remains running.
+- Explorer, desktop, and ordinary helper apps remain open.
 
 If anything looks wrong:
 
@@ -226,6 +246,7 @@ Pass criteria:
 - Start-menu shutdown triggers the same decision path as the scheduled shutdown
   test.
 - Cancel does not require racing `shutdown /a`.
+- Cancel happens before Explorer/desktop black-screen teardown.
 - Confirm does not issue a second shutdown request from SWiT.
 
 ## Level 8: Edge Cases
@@ -240,6 +261,8 @@ Run these only after the basic path is stable:
 - Remote session attached.
 - Machine locked.
 - Unsaved Notepad window open.
+- A helper app that logs `WM_QUERYENDSESSION` at default shutdown level.
+- A helper app that logs `WM_QUERYENDSESSION` at later shutdown level.
 - Low countdown values: 1, 2, 5 seconds.
 - Invalid settings values.
 
@@ -264,3 +287,5 @@ Do not install SWiT as always-on autostart until the recovery path is tested.
   https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-shutdownblockreasoncreate
 - `shutdown` command:
   https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/shutdown
+- `SetProcessShutdownParameters`:
+  https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setprocessshutdownparameters

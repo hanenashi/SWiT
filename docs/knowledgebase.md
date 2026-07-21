@@ -24,6 +24,9 @@ For SWiT, that means:
 
 - The agent must own a real top-level window.
 - The window must have a running message loop.
+- The process must request an early application shutdown level with
+  `SetProcessShutdownParameters`, otherwise Explorer and other apps may receive
+  shutdown messages before SWiT and start closing before SWiT cancels.
 - The confirmation decision belongs in the `WM_QUERYENDSESSION` path.
 - The cancel path returns `FALSE`.
 - The allow path returns `TRUE` and lets the original shutdown continue.
@@ -83,15 +86,29 @@ Design implications:
 
 Windows has a shutdown ordering concept for processes. A higher shutdown level
 means a process is asked to shut down earlier; a lower level means later. SWiT
-may eventually use `SetProcessShutdownParameters`, but it should not be needed
-for the first implementation.
+should use `SetProcessShutdownParameters` during startup so its shutdown query
+happens before ordinary applications begin quitting.
+
+Microsoft documents these application ranges:
+
+- `0x100` to `0x1FF`: application reserved last shutdown range.
+- `0x200` to `0x2FF`: application reserved in-between shutdown range.
+- `0x300` to `0x3FF`: application reserved first shutdown range.
+
+All processes start at `0x280`, so a SWiT level such as `0x3FF` should place it
+ahead of Explorer and normal desktop applications without entering the
+system-reserved `0x400` to `0x4FF` range.
 
 Possible future use:
 
-- choose whether SWiT should be queried earlier or later than ordinary apps;
-- ensure SWiT is still present when Start-menu shutdown begins;
+- tune the level if another important app also uses the first-shutdown range;
 - test carefully, because ordering can affect interaction with unsaved-work
   prompts in other apps.
+
+This addresses the main failure mode seen in the old SWiT experiments: shutdown
+was technically canceled, but Explorer/desktop and other quit-ready apps had
+already started closing first. A late veto is not good enough; SWiT needs an
+early veto.
 
 ## Power-Off Is Too Late
 
@@ -140,3 +157,5 @@ Source:
   https://learn.microsoft.com/en-us/windows/win32/shutdown/wm-endsession
 - Microsoft `ExitWindowsEx`:
   https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-exitwindowsex
+- Microsoft `SetProcessShutdownParameters`:
+  https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-setprocessshutdownparameters

@@ -36,6 +36,7 @@ Tasks:
 - Create `swit-agent.exe`.
 - Register a real top-level hidden window class.
 - Run a normal message loop.
+- Call `SetProcessShutdownParameters(0x3FF, 0)` and log success/failure.
 - Log `WM_CREATE`, `WM_CLOSE`, `WM_DESTROY`, `WM_QUERYENDSESSION`, and
   `WM_ENDSESSION`.
 - Add a custom test message, for example `WM_APP + 1`, that exercises the same
@@ -126,6 +127,7 @@ Goal: test real `WM_QUERYENDSESSION` handling with recoverable shutdown attempts
 Tasks:
 
 - Register a short shutdown block reason with `ShutdownBlockReasonCreate`.
+- Set an application-first shutdown level before real shutdown tests.
 - On `WM_QUERYENDSESSION`, show confirmation only when safe.
 - Return `FALSE` for cancel.
 - Return `TRUE` for confirm and let the original shutdown continue.
@@ -135,6 +137,7 @@ Tasks:
 Done when:
 
 - `shutdown /s /t 60` plus a cancel decision keeps the machine running.
+- Explorer and ordinary test apps remain open after a cancel decision.
 - `shutdown /a` can abort scheduled test shutdowns before timeout.
 - Logs clearly show query, decision, and end-session results.
 

@@ -19,12 +19,14 @@ Build a per-user Win32 app:
 1. Start at user sign-in.
 2. Create a hidden top-level window.
 3. Run a standard message loop.
-4. Handle `WM_QUERYENDSESSION`.
-5. If protection is enabled:
+4. Call `SetProcessShutdownParameters` with an application-first shutdown
+   level so SWiT is queried before Explorer and ordinary apps.
+5. Handle `WM_QUERYENDSESSION`.
+6. If protection is enabled:
    - call `ShutdownBlockReasonCreate`;
    - show a short confirmation prompt if Windows still permits UI;
    - return `FALSE` when the user cancels or does not explicitly confirm.
-6. Handle `WM_ENDSESSION` for cleanup and logging.
+7. Handle `WM_ENDSESSION` for cleanup and logging.
 
 This should catch the normal Start menu shutdown path because that path asks
 Windows to end the session, which broadcasts `WM_QUERYENDSESSION` to GUI apps
@@ -42,6 +44,9 @@ shutdown test ladder, and `docs/knowledgebase.md` for the shutdown model.
 - Should there be a tray icon for temporary disable?
 - Should settings live in the registry, a local config file, or both?
 - Should logs go to a text file, Event Log, or DebugView only?
+- Which application-first shutdown level should SWiT use? Start with `0x3FF`
+  in test builds, because ordinary apps default to `0x280` and Windows shuts
+  higher levels down first.
 
 ## Legacy Experiments
 
