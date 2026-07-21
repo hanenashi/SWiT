@@ -61,9 +61,8 @@ Useful Microsoft references:
 
 ## Build
 
-The old experiments were built directly with MSVC `cl.exe`. The restarted
-version should keep that path initially, then move to CMake only if the project
-needs more structure.
+The restarted version currently builds directly with MSVC `cl.exe`. Move to
+CMake only if the project needs more structure.
 
 Expected developer shell:
 
@@ -71,10 +70,28 @@ Expected developer shell:
 x64 Native Tools Command Prompt for VS
 ```
 
-Initial build shape:
+From a normal shell, the build script will load the VS 2022 x64 toolchain:
 
 ```cmd
-cl.exe /DUNICODE /D_UNICODE /EHsc /W4 /Fe:swit-agent.exe src\swit_agent.cpp user32.lib shell32.lib
+scripts\build.bat
+```
+
+Outputs:
+
+```text
+build\swit-agent.exe
+build\swit-send.exe
+```
+
+Run the no-shutdown smoke harness:
+
+```cmd
+build\swit-agent.exe --test-mode --cancel-on-query --log logs\smoke.log
+build\swit-send.exe ping
+build\swit-send.exe shutdown
+build\swit-send.exe restart
+build\swit-send.exe logoff
+build\swit-send.exe exit
 ```
 
 ## Legacy Notes

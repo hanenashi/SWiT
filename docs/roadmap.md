@@ -33,19 +33,20 @@ Goal: prove the Win32 message core without tray UI or real shutdown.
 
 Tasks:
 
-- Create `swit-agent.exe`.
-- Register a real top-level hidden window class.
-- Run a normal message loop.
-- Call `SetProcessShutdownParameters(0x3FF, 0)` and log success/failure.
+- Create `swit-agent.exe`. Done.
+- Register a real top-level hidden window class. Done.
+- Run a normal message loop. Done.
+- Call `SetProcessShutdownParameters(0x3FF, 0)` and log success/failure. Done.
 - Log `WM_CREATE`, `WM_CLOSE`, `WM_DESTROY`, `WM_QUERYENDSESSION`, and
-  `WM_ENDSESSION`.
-- Add a custom test message, for example `WM_APP + 1`, that exercises the same
-  decision path without asking Windows to shut down.
-- Add command-line flags:
+  `WM_ENDSESSION`. Done.
+- Add a custom registered test message that exercises the same decision path
+  without asking Windows to shut down. Done.
+- Add command-line flags. Started:
   - `--test-mode`
   - `--allow-on-query`
   - `--cancel-on-query`
   - `--log <path>`
+- Add `swit-send.exe` helper for synthetic messages. Done.
 
 Done when:
 
@@ -53,6 +54,9 @@ Done when:
 - The test message can drive the confirmation decision without ending the
   Windows session.
 - Logs are timestamped and readable.
+
+Current status: completed for no-shutdown smoke testing. Real shutdown testing
+still waits for helper-app ordering checks.
 
 ## Phase 2: Shutdown Decision Core
 

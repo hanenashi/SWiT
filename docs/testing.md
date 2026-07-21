@@ -60,6 +60,23 @@ Suggested result states:
 
 Goal: test logic without invoking Windows shutdown.
 
+Build:
+
+```cmd
+scripts\build.bat
+```
+
+Run:
+
+```cmd
+build\swit-agent.exe --test-mode --cancel-on-query --log logs\smoke.log
+build\swit-send.exe ping
+build\swit-send.exe shutdown
+build\swit-send.exe restart
+build\swit-send.exe logoff
+build\swit-send.exe exit
+```
+
 Tests:
 
 - Start app in `--test-mode`.

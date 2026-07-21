@@ -3,6 +3,8 @@
 .vscode/
 
 # Build outputs
+build/
+logs/
 *.exe
 *.dll
 *.obj
