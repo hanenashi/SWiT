@@ -15,8 +15,10 @@ The intended behavior is:
 
 The clean implementation now has a per-user agent, an application-first
 shutdown level, a native Windows confirmation flow, logging, and synthetic test
-tools. The older hidden-window, service, and hook experiments remain archived
-under `archive/2026-07-21-pre-restart/` as research material.
+tools. It also enforces a single instance and provides a notification-area icon
+for enabling/disabling protection or exiting. The older hidden-window, service,
+and hook experiments remain archived under
+`archive/2026-07-21-pre-restart/` as research material.
 
 ## Design Direction
 
@@ -28,7 +30,7 @@ Preferred architecture:
 - `ShutdownBlockReasonCreate` provides the visible reason Windows shows when
   shutdown is blocked.
 - Windows' full-screen blocker UI is the confirmation surface.
-- Optional tray icon later for settings, enable/disable, and logs.
+- Notification-area icon with protection toggle and clean Exit command.
 
 Avoid as the primary design:
 
@@ -86,16 +88,33 @@ build\swit-send.exe ping
 build\swit-send.exe shutdown
 build\swit-send.exe restart
 build\swit-send.exe logoff
+build\swit-send.exe disable
+build\swit-send.exe shutdown
+build\swit-send.exe enable
+build\swit-send.exe shutdown
 build\swit-send.exe exit
 ```
 
 Normal startup blocks shutdown and relies on Windows' native confirmation UI.
 `--cancel-on-query` explicitly selects the same behavior, while
-`--allow-on-query` is a diagnostic mode. `swit-send.exe exit` remains available
-in normal mode as the recovery command while the tray menu is not implemented.
+`--allow-on-query` is a diagnostic mode. `swit-send.exe` remains available as a
+CLI alternative to the tray controls.
 
 Run SWiT as the signed-in user, not from an elevated terminal. Elevation is not
 required and prevents a normal `swit-send.exe` process from controlling it.
+
+The notification icon may initially appear in Windows' tray overflow. Its menu
+contains a checked **Protection enabled** item and **Exit**. The same controls
+are available from a terminal:
+
+```cmd
+build\swit-send.exe disable
+build\swit-send.exe enable
+build\swit-send.exe exit
+```
+
+Starting `swit-agent.exe` again in the same user session exits immediately and
+leaves the existing agent untouched.
 
 If you start the executables from inside `build\`, use `swit-send.exe` directly
 and pass an absolute or `..\logs\...` log path if you want logs under the repo

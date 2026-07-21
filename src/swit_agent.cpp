@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <shellapi.h>
 
 #include <cstdio>
 #include <cwchar>
@@ -11,13 +12,29 @@ namespace {
 
 constexpr DWORD kSwitShutdownLevel = 0x3FF;
 constexpr DWORD kSwitShutdownFlags = 0;
+constexpr wchar_t kSingleInstanceMutexName[] =
+    L"Local\\SWiT.Agent.SingleInstance";
+constexpr UINT kTrayCallbackMessage = WM_APP + 1;
+constexpr UINT kTrayIconId = 1;
+constexpr UINT_PTR kTrayRetryTimerId = 1;
+constexpr UINT kCommandToggleProtection = 1001;
+constexpr UINT kCommandExit = 1002;
+constexpr GUID kTrayIconGuid = {
+    0x36d382d2,
+    0x33f4,
+    0x4b12,
+    {0xad, 0xbb, 0x61, 0x80, 0x4a, 0xee, 0x21, 0x26},
+};
 
 HINSTANCE g_instance = nullptr;
 HWND g_window = nullptr;
 UINT g_test_message = 0;
+UINT g_taskbar_created_message = 0;
 FILE* g_log = nullptr;
+HANDLE g_single_instance_mutex = nullptr;
 bool g_test_mode = false;
 bool g_block_reason_created = false;
+bool g_tray_icon_added = false;
 
 enum class QueryMode {
     Block,
@@ -144,6 +161,10 @@ const wchar_t* TestCommandName(WPARAM command) {
         return L"QUERY_RESTART";
     case SWIT_TEST_QUERY_LOGOFF:
         return L"QUERY_LOGOFF";
+    case SWIT_CONTROL_ENABLE_PROTECTION:
+        return L"ENABLE_PROTECTION";
+    case SWIT_CONTROL_DISABLE_PROTECTION:
+        return L"DISABLE_PROTECTION";
     case SWIT_TEST_EXIT:
         return L"EXIT";
     default:
@@ -244,6 +265,174 @@ bool CreateShutdownBlockReason(HWND hwnd) {
     return false;
 }
 
+bool DestroyShutdownBlockReason(HWND hwnd) {
+    if (!g_block_reason_created) {
+        return true;
+    }
+
+    if (!ShutdownBlockReasonDestroy(hwnd)) {
+        Log(L"ShutdownBlockReasonDestroy failed: %ls",
+            LastErrorText(GetLastError()).c_str());
+        return false;
+    }
+
+    g_block_reason_created = false;
+    Log(L"ShutdownBlockReasonDestroy succeeded");
+    return true;
+}
+
+HICON LoadTrayIcon() {
+    LPCWSTR iconId = g_query_mode == QueryMode::Block ? IDI_SHIELD : IDI_WARNING;
+    HICON icon = LoadIconW(nullptr, iconId);
+    if (icon == nullptr) {
+        icon = LoadIconW(nullptr, IDI_APPLICATION);
+    }
+    return icon;
+}
+
+void SetTrayTip(NOTIFYICONDATAW* data) {
+    const wchar_t* tip = g_query_mode == QueryMode::Block
+                             ? L"SWiT - protection enabled"
+                             : L"SWiT - protection disabled";
+    wcscpy_s(data->szTip, tip);
+}
+
+bool AddTrayIcon(HWND hwnd) {
+    NOTIFYICONDATAW data{};
+    data.cbSize = sizeof(data);
+    data.hWnd = hwnd;
+    data.uID = kTrayIconId;
+    data.uFlags =
+        NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP | NIF_GUID;
+    data.uCallbackMessage = kTrayCallbackMessage;
+    data.hIcon = LoadTrayIcon();
+    data.guidItem = kTrayIconGuid;
+    SetTrayTip(&data);
+
+    if (!Shell_NotifyIconW(NIM_ADD, &data)) {
+        Log(L"Shell_NotifyIcon NIM_ADD failed: %ls",
+            LastErrorText(GetLastError()).c_str());
+        SetTimer(hwnd, kTrayRetryTimerId, 2000, nullptr);
+        return false;
+    }
+
+    data.uVersion = NOTIFYICON_VERSION_4;
+    if (!Shell_NotifyIconW(NIM_SETVERSION, &data)) {
+        Log(L"Shell_NotifyIcon NIM_SETVERSION failed: %ls",
+            LastErrorText(GetLastError()).c_str());
+    }
+
+    KillTimer(hwnd, kTrayRetryTimerId);
+    g_tray_icon_added = true;
+    Log(L"tray icon added");
+    return true;
+}
+
+void UpdateTrayIcon(HWND hwnd) {
+    if (!g_tray_icon_added) {
+        AddTrayIcon(hwnd);
+        return;
+    }
+
+    NOTIFYICONDATAW data{};
+    data.cbSize = sizeof(data);
+    data.hWnd = hwnd;
+    data.uID = kTrayIconId;
+    data.uFlags = NIF_ICON | NIF_TIP | NIF_SHOWTIP | NIF_GUID;
+    data.hIcon = LoadTrayIcon();
+    data.guidItem = kTrayIconGuid;
+    SetTrayTip(&data);
+
+    if (!Shell_NotifyIconW(NIM_MODIFY, &data)) {
+        Log(L"Shell_NotifyIcon NIM_MODIFY failed: %ls",
+            LastErrorText(GetLastError()).c_str());
+        g_tray_icon_added = false;
+        SetTimer(hwnd, kTrayRetryTimerId, 2000, nullptr);
+    }
+}
+
+void RemoveTrayIcon(HWND hwnd) {
+    KillTimer(hwnd, kTrayRetryTimerId);
+    if (!g_tray_icon_added) {
+        return;
+    }
+
+    NOTIFYICONDATAW data{};
+    data.cbSize = sizeof(data);
+    data.hWnd = hwnd;
+    data.uID = kTrayIconId;
+    data.uFlags = NIF_GUID;
+    data.guidItem = kTrayIconGuid;
+    Shell_NotifyIconW(NIM_DELETE, &data);
+    g_tray_icon_added = false;
+    Log(L"tray icon removed");
+}
+
+bool SetProtectionEnabled(HWND hwnd, bool enabled, const wchar_t* source) {
+    bool currentlyEnabled = g_query_mode == QueryMode::Block;
+    if (enabled == currentlyEnabled) {
+        Log(L"protection unchanged source=%ls enabled=%u", source,
+            enabled ? 1u : 0u);
+        return true;
+    }
+
+    if (enabled) {
+        if (!CreateShutdownBlockReason(hwnd)) {
+            Log(L"protection enable failed source=%ls", source);
+            return false;
+        }
+        g_query_mode = QueryMode::Block;
+    } else {
+        if (!DestroyShutdownBlockReason(hwnd)) {
+            Log(L"protection disable failed source=%ls", source);
+            return false;
+        }
+        g_query_mode = QueryMode::Allow;
+    }
+
+    Log(L"protection changed source=%ls enabled=%u", source,
+        enabled ? 1u : 0u);
+    UpdateTrayIcon(hwnd);
+    return true;
+}
+
+void ShowTrayMenu(HWND hwnd) {
+    HMENU menu = CreatePopupMenu();
+    if (menu == nullptr) {
+        Log(L"CreatePopupMenu failed: %ls", LastErrorText(GetLastError()).c_str());
+        return;
+    }
+
+    UINT protectionFlags = MF_STRING;
+    if (g_query_mode == QueryMode::Block) {
+        protectionFlags |= MF_CHECKED;
+    }
+    AppendMenuW(menu, protectionFlags, kCommandToggleProtection,
+                L"Protection enabled");
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING, kCommandExit, L"Exit");
+
+    POINT point{};
+    GetCursorPos(&point);
+    SetForegroundWindow(hwnd);
+    UINT command = TrackPopupMenuEx(menu,
+                                    TPM_RIGHTBUTTON | TPM_BOTTOMALIGN |
+                                        TPM_RETURNCMD,
+                                    point.x, point.y, hwnd, nullptr);
+    DestroyMenu(menu);
+    PostMessageW(hwnd, WM_NULL, 0, 0);
+
+    if (command == kCommandToggleProtection) {
+        bool enabled = g_query_mode != QueryMode::Block;
+        if (!SetProtectionEnabled(hwnd, enabled, L"tray")) {
+            MessageBoxW(hwnd, L"SWiT could not change protection state.",
+                        L"SWiT", MB_OK | MB_ICONERROR | MB_TOPMOST);
+        }
+    } else if (command == kCommandExit) {
+        DestroyWindow(hwnd);
+    }
+}
+
 bool DecideShutdown() {
     return g_query_mode == QueryMode::Allow;
 }
@@ -289,9 +478,15 @@ void HandleTestMessage(WPARAM command, LPARAM value) {
             allow ? L"allow" : L"cancel");
         break;
     }
+    case SWIT_CONTROL_ENABLE_PROTECTION:
+        SetProtectionEnabled(g_window, true, L"swit-send");
+        break;
+    case SWIT_CONTROL_DISABLE_PROTECTION:
+        SetProtectionEnabled(g_window, false, L"swit-send");
+        break;
     case SWIT_TEST_EXIT:
         Log(L"test requested exit");
-        PostQuitMessage(0);
+        DestroyWindow(g_window);
         break;
     default:
         break;
@@ -301,6 +496,22 @@ void HandleTestMessage(WPARAM command, LPARAM value) {
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam) {
     if (message == g_test_message) {
         HandleTestMessage(wparam, lparam);
+        return 0;
+    }
+    if (g_taskbar_created_message != 0 &&
+        message == g_taskbar_created_message) {
+        Log(L"TaskbarCreated received");
+        g_tray_icon_added = false;
+        AddTrayIcon(hwnd);
+        return 0;
+    }
+    if (message == kTrayCallbackMessage) {
+        UINT event = LOWORD(lparam);
+        if (event == WM_CONTEXTMENU || event == NIN_SELECT ||
+            event == NIN_KEYSELECT || event == WM_LBUTTONUP ||
+            event == WM_RBUTTONUP) {
+            ShowTrayMenu(hwnd);
+        }
         return 0;
     }
 
@@ -314,6 +525,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
         } else {
             Log(L"shutdown block reason disabled in allow mode");
         }
+        AddTrayIcon(hwnd);
         return 0;
 
     case WM_CLOSE:
@@ -323,11 +535,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lpara
 
     case WM_DESTROY:
         Log(L"WM_DESTROY");
-        if (g_block_reason_created) {
-            ShutdownBlockReasonDestroy(hwnd);
-            g_block_reason_created = false;
-        }
+        RemoveTrayIcon(hwnd);
+        DestroyShutdownBlockReason(hwnd);
         PostQuitMessage(0);
+        return 0;
+
+    case WM_TIMER:
+        if (wparam == kTrayRetryTimerId && !g_tray_icon_added) {
+            AddTrayIcon(hwnd);
+        }
         return 0;
 
     case WM_QUERYENDSESSION:
@@ -397,6 +613,18 @@ bool HasArg(int argc, wchar_t** argv, const wchar_t* name) {
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     g_instance = instance;
 
+    SetLastError(ERROR_SUCCESS);
+    g_single_instance_mutex =
+        CreateMutexW(nullptr, FALSE, kSingleInstanceMutexName);
+    if (g_single_instance_mutex == nullptr) {
+        return 1;
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        CloseHandle(g_single_instance_mutex);
+        g_single_instance_mutex = nullptr;
+        return 0;
+    }
+
     int argc = 0;
     wchar_t** argv = CommandLineToArgvW(GetCommandLineW(), &argc);
 
@@ -428,6 +656,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     }
 
     Log(L"SWiT agent starting");
+    Log(L"single instance acquired name=%ls", kSingleInstanceMutexName);
     Log(L"log path=%ls", logPath.c_str());
     Log(L"test mode=%u", g_test_mode ? 1u : 0u);
     Log(L"query mode=%ls", QueryModeName(g_query_mode));
@@ -441,6 +670,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         return 1;
     }
     Log(L"registered test message id=%u", g_test_message);
+
+    g_taskbar_created_message = RegisterWindowMessageW(L"TaskbarCreated");
+    if (g_taskbar_created_message == 0) {
+        Log(L"RegisterWindowMessage TaskbarCreated failed: %ls",
+            LastErrorText(GetLastError()).c_str());
+    } else {
+        Log(L"registered TaskbarCreated message id=%u",
+            g_taskbar_created_message);
+    }
 
     bool shutdownOrderOk = ConfigureShutdownOrder();
     if (!shutdownOrderOk || !RegisterWindowClass() || !CreateAgentWindow()) {
@@ -465,6 +703,11 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     if (g_log != nullptr) {
         fclose(g_log);
         g_log = nullptr;
+    }
+
+    if (g_single_instance_mutex != nullptr) {
+        CloseHandle(g_single_instance_mutex);
+        g_single_instance_mutex = nullptr;
     }
 
     if (argv != nullptr) {

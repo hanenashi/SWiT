@@ -106,22 +106,28 @@ Goal: restore the original product shape safely.
 
 Tasks:
 
-- Add notification-area icon via `Shell_NotifyIcon`.
+- Add notification-area icon via `Shell_NotifyIcon`. Done.
+- Give the icon a stable GUID so Explorer preserves its identity. Done.
 - Add right-click menu:
+  - Protection enabled/disabled. Done.
+  - Exit. Done.
   - Settings
-  - Close App
   - About
   - Donate
 - Add placeholders for About and Donate.
-- Add single-instance guard.
-- Handle Explorer/taskbar restart and recreate the tray icon.
-- Add explicit Close App behavior that removes the tray icon cleanly.
+- Add single-instance guard. Done.
+- Handle Explorer/taskbar restart and recreate the tray icon. Done.
+- Add explicit Exit behavior that removes the tray icon cleanly. Done.
 
 Done when:
 
 - The app lives in the tray.
-- Right-click menu works.
+- Protection toggle and Exit work.
 - Closing the app cannot leave stale UI state behind.
+
+Current status: core tray lifecycle implemented and automatically tested;
+manual menu interaction remains to be checked on Kurochan. Settings, About,
+Donate, and a custom icon remain pending.
 
 ## Phase 4: Settings
 

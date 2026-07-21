@@ -17,16 +17,19 @@ Start -> Power -> Shut down, and ask the interactive user to confirm.
 Build a per-user Win32 app:
 
 1. Start at user sign-in.
-2. Create a hidden top-level window.
-3. Run a standard message loop.
-4. Call `SetProcessShutdownParameters` with an application-first shutdown
+2. Acquire a per-session single-instance mutex.
+3. Create a hidden top-level window.
+4. Run a standard message loop.
+5. Add a GUID-identified notification icon and restore it after Explorer
+   restarts.
+6. Call `SetProcessShutdownParameters` with an application-first shutdown
    level so SWiT is queried before Explorer and ordinary apps.
-5. Handle `WM_QUERYENDSESSION`.
-6. If protection is enabled:
+7. Handle `WM_QUERYENDSESSION`.
+8. If protection is enabled:
    - register a clear reason with `ShutdownBlockReasonCreate`;
    - return `FALSE` immediately;
    - let Windows show its native **Shut down anyway / Cancel** screen.
-7. Handle `WM_ENDSESSION` for cleanup and logging.
+9. Handle `WM_ENDSESSION` for cleanup and logging.
 
 This should catch the normal Start menu shutdown path because that path asks
 Windows to end the session, which broadcasts `WM_QUERYENDSESSION` to GUI apps
@@ -41,7 +44,6 @@ shutdown test ladder, and `docs/knowledgebase.md` for the shutdown model.
 - Should cancel be the default on timeout?
 - Should confirmation text distinguish shutdown, restart, and logoff when
   Windows exposes enough detail?
-- Should there be a tray icon for temporary disable?
 - Should settings live in the registry, a local config file, or both?
 - Should logs go to a text file, Event Log, or DebugView only?
 - Which application-first shutdown level should SWiT use? Start with `0x3FF`

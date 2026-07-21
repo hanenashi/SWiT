@@ -20,6 +20,12 @@ unsigned int ParseCommand(const wchar_t* value) {
     if (wcscmp(value, L"logoff") == 0) {
         return SWIT_TEST_QUERY_LOGOFF;
     }
+    if (wcscmp(value, L"enable") == 0) {
+        return SWIT_CONTROL_ENABLE_PROTECTION;
+    }
+    if (wcscmp(value, L"disable") == 0) {
+        return SWIT_CONTROL_DISABLE_PROTECTION;
+    }
     if (wcscmp(value, L"exit") == 0) {
         return SWIT_TEST_EXIT;
     }
@@ -30,7 +36,8 @@ unsigned int ParseCommand(const wchar_t* value) {
 
 int wmain(int argc, wchar_t** argv) {
     if (argc < 2 || argc > 3) {
-        std::wcerr << L"Usage: swit-send [--helper] <ping|shutdown|restart|logoff|exit>\n";
+        std::wcerr << L"Usage: swit-send [--helper] "
+                      L"<ping|shutdown|restart|logoff|enable|disable|exit>\n";
         return 2;
     }
 
@@ -48,6 +55,10 @@ int wmain(int argc, wchar_t** argv) {
     unsigned int command = ParseCommand(commandArg);
     if (command == 0) {
         std::wcerr << L"Unsupported command: " << commandArg << L"\n";
+        return 2;
+    }
+    if (helper && command != SWIT_TEST_PING && command != SWIT_TEST_EXIT) {
+        std::wcerr << L"Helper supports only ping and exit\n";
         return 2;
     }
 

@@ -90,6 +90,10 @@ build\swit-send.exe ping
 build\swit-send.exe shutdown
 build\swit-send.exe restart
 build\swit-send.exe logoff
+build\swit-send.exe disable
+build\swit-send.exe shutdown
+build\swit-send.exe enable
+build\swit-send.exe shutdown
 build\swit-send.exe exit
 ```
 
@@ -100,11 +104,16 @@ Tests:
 
 - Start app in `--test-mode`.
 - Verify hidden window is created.
+- Verify the tray icon appears, possibly in the overflow area.
+- Verify its menu checkmark follows enable/disable state.
 - Synthetic `WM_APP` test message triggers the same decision function used by
   shutdown handling.
 - Block mode logs `decision=cancel` without showing UI.
 - Allow mode logs `decision=allow` without showing UI.
+- Starting a second agent exits with code 0 and does not create a second log.
+- Disable removes the block reason; enable recreates it.
 - `swit-send.exe exit` closes the agent cleanly.
+- Exit removes the tray icon and block reason.
 - Logs are readable while the agent is still running.
 
 Pass criteria:
