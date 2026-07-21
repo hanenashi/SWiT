@@ -110,6 +110,7 @@ Tasks:
 - Give the icon a stable GUID so Explorer preserves its identity. Done.
 - Add right-click menu:
   - Protection enabled/disabled. Done.
+  - Start with Windows. Done.
   - Exit. Done.
   - Settings
   - About
@@ -135,7 +136,9 @@ Goal: add the controls recovered from the Grok history.
 
 Tasks:
 
-- Add per-user persisted settings.
+- Add per-user persisted settings. Started:
+  - Start with Windows via the current-user `Run` key. Done.
+  - Runtime protection state intentionally resets to enabled at launch. Done.
 - Implement:
   - Shutdown countdown enabled.
   - Shutdown countdown seconds.
@@ -145,6 +148,9 @@ Tasks:
 - Make mutually enabled countdowns deterministic. Pick one policy:
   - one default action radio group, or
   - reject enabling both countdowns.
+
+The old countdown controls require redesign because the MVP now uses Windows'
+native blocker screen rather than a custom shutdown dialog.
 
 Done when:
 
@@ -201,7 +207,7 @@ Goal: make SWiT easy to install and remove.
 
 Tasks:
 
-- Add autostart at sign-in.
+- Add optional autostart at sign-in. Done for development builds.
 - Add uninstall/disable path.
 - Decide between zip, installer, or simple setup script.
 - Document recovery command to disable SWiT if it misbehaves.

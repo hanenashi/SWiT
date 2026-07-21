@@ -44,11 +44,21 @@ shutdown test ladder, and `docs/knowledgebase.md` for the shutdown model.
 - Should cancel be the default on timeout?
 - Should confirmation text distinguish shutdown, restart, and logoff when
   Windows exposes enough detail?
-- Should settings live in the registry, a local config file, or both?
+- Should future settings beyond autostart live in the registry, a local config
+  file, or both?
 - Should logs go to a text file, Event Log, or DebugView only?
 - Which application-first shutdown level should SWiT use? Start with `0x3FF`
   in test builds, because ordinary apps default to `0x280` and Windows shuts
   higher levels down first.
+
+## Persisted State
+
+`Start with Windows` is stored as the `SWiT` value under the current user's
+`Software\Microsoft\Windows\CurrentVersion\Run` key. It points to the current
+agent executable and requires no elevation.
+
+The runtime protection toggle is not persisted. Every process launch starts in
+protected mode unless an explicit diagnostic command-line flag says otherwise.
 
 ## Legacy Experiments
 

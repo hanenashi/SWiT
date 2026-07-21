@@ -104,14 +104,20 @@ Run SWiT as the signed-in user, not from an elevated terminal. Elevation is not
 required and prevents a normal `swit-send.exe` process from controlling it.
 
 The notification icon may initially appear in Windows' tray overflow. Its menu
-contains a checked **Protection enabled** item and **Exit**. The same controls
-are available from a terminal:
+contains **Protection enabled**, **Start with Windows**, and **Exit**. The same
+controls are available from a terminal:
 
 ```cmd
 build\swit-send.exe disable
 build\swit-send.exe enable
+build\swit-send.exe startup-enable
+build\swit-send.exe startup-disable
 build\swit-send.exe exit
 ```
+
+The startup preference is persisted in the current user's Windows `Run` key.
+The protection toggle is intentionally not persisted: every fresh SWiT process
+starts protected.
 
 Starting `swit-agent.exe` again in the same user session exits immediately and
 leaves the existing agent untouched.

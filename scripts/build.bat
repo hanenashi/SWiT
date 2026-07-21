@@ -16,7 +16,7 @@ if not exist build mkdir build
 
 cl.exe /nologo /DUNICODE /D_UNICODE /EHsc /W4 /permissive- ^
     /Fobuild\swit_agent.obj /Febuild\swit-agent.exe ^
-    src\swit_agent.cpp user32.lib shell32.lib || exit /b 1
+    src\swit_agent.cpp user32.lib shell32.lib advapi32.lib || exit /b 1
 
 cl.exe /nologo /DUNICODE /D_UNICODE /EHsc /W4 /permissive- ^
     /Fobuild\swit_send.obj /Febuild\swit-send.exe ^

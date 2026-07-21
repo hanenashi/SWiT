@@ -14,11 +14,15 @@ constexpr DWORD kSwitShutdownLevel = 0x3FF;
 constexpr DWORD kSwitShutdownFlags = 0;
 constexpr wchar_t kSingleInstanceMutexName[] =
     L"Local\\SWiT.Agent.SingleInstance";
+constexpr wchar_t kRunKeyPath[] =
+    L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+constexpr wchar_t kDefaultAutostartValueName[] = L"SWiT";
 constexpr UINT kTrayCallbackMessage = WM_APP + 1;
 constexpr UINT kTrayIconId = 1;
 constexpr UINT_PTR kTrayRetryTimerId = 1;
 constexpr UINT kCommandToggleProtection = 1001;
-constexpr UINT kCommandExit = 1002;
+constexpr UINT kCommandToggleStartup = 1002;
+constexpr UINT kCommandExit = 1003;
 constexpr GUID kTrayIconGuid = {
     0x36d382d2,
     0x33f4,
@@ -35,6 +39,7 @@ HANDLE g_single_instance_mutex = nullptr;
 bool g_test_mode = false;
 bool g_block_reason_created = false;
 bool g_tray_icon_added = false;
+std::wstring g_autostart_value_name = kDefaultAutostartValueName;
 
 enum class QueryMode {
     Block,
@@ -165,6 +170,10 @@ const wchar_t* TestCommandName(WPARAM command) {
         return L"ENABLE_PROTECTION";
     case SWIT_CONTROL_DISABLE_PROTECTION:
         return L"DISABLE_PROTECTION";
+    case SWIT_CONTROL_ENABLE_STARTUP:
+        return L"ENABLE_STARTUP";
+    case SWIT_CONTROL_DISABLE_STARTUP:
+        return L"DISABLE_STARTUP";
     case SWIT_TEST_EXIT:
         return L"EXIT";
     default:
@@ -396,6 +405,102 @@ bool SetProtectionEnabled(HWND hwnd, bool enabled, const wchar_t* source) {
     return true;
 }
 
+bool CurrentExecutablePath(std::wstring* path) {
+    wchar_t module[32768]{};
+    DWORD length = GetModuleFileNameW(nullptr, module, _countof(module));
+    if (length == 0 || length >= _countof(module)) {
+        Log(L"GetModuleFileName for startup failed: %ls",
+            LastErrorText(GetLastError()).c_str());
+        return false;
+    }
+
+    *path = module;
+    return true;
+}
+
+bool QueryAutostart(bool* enabled, std::wstring* command) {
+    wchar_t value[32768]{};
+    DWORD bytes = sizeof(value);
+    LSTATUS status = RegGetValueW(
+        HKEY_CURRENT_USER, kRunKeyPath, g_autostart_value_name.c_str(),
+        RRF_RT_REG_SZ, nullptr, value, &bytes);
+    if (status == ERROR_FILE_NOT_FOUND) {
+        *enabled = false;
+        command->clear();
+        return true;
+    }
+    if (status != ERROR_SUCCESS) {
+        Log(L"RegGetValue startup failed: %ls",
+            LastErrorText(static_cast<DWORD>(status)).c_str());
+        return false;
+    }
+
+    *enabled = true;
+    *command = value;
+    return true;
+}
+
+bool SetAutostartEnabled(bool enabled, const wchar_t* source) {
+    if (enabled) {
+        std::wstring modulePath;
+        if (!CurrentExecutablePath(&modulePath)) {
+            return false;
+        }
+        std::wstring command = L"\"" + modulePath + L"\"";
+
+        HKEY key = nullptr;
+        LSTATUS status = RegCreateKeyExW(
+            HKEY_CURRENT_USER, kRunKeyPath, 0, nullptr, 0, KEY_SET_VALUE,
+            nullptr, &key, nullptr);
+        if (status != ERROR_SUCCESS) {
+            Log(L"RegCreateKey startup failed: %ls",
+                LastErrorText(static_cast<DWORD>(status)).c_str());
+            return false;
+        }
+
+        DWORD bytes = static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t));
+        status = RegSetValueExW(
+            key, g_autostart_value_name.c_str(), 0, REG_SZ,
+            reinterpret_cast<const BYTE*>(command.c_str()), bytes);
+        RegCloseKey(key);
+        if (status != ERROR_SUCCESS) {
+            Log(L"RegSetValue startup failed: %ls",
+                LastErrorText(static_cast<DWORD>(status)).c_str());
+            return false;
+        }
+
+        Log(L"startup changed source=%ls enabled=1 value=%ls command=%ls",
+            source, g_autostart_value_name.c_str(), command.c_str());
+        return true;
+    }
+
+    HKEY key = nullptr;
+    LSTATUS status = RegOpenKeyExW(HKEY_CURRENT_USER, kRunKeyPath, 0,
+                                   KEY_SET_VALUE, &key);
+    if (status == ERROR_FILE_NOT_FOUND) {
+        Log(L"startup unchanged source=%ls enabled=0 value=%ls", source,
+            g_autostart_value_name.c_str());
+        return true;
+    }
+    if (status != ERROR_SUCCESS) {
+        Log(L"RegOpenKey startup failed: %ls",
+            LastErrorText(static_cast<DWORD>(status)).c_str());
+        return false;
+    }
+
+    status = RegDeleteValueW(key, g_autostart_value_name.c_str());
+    RegCloseKey(key);
+    if (status != ERROR_SUCCESS && status != ERROR_FILE_NOT_FOUND) {
+        Log(L"RegDeleteValue startup failed: %ls",
+            LastErrorText(static_cast<DWORD>(status)).c_str());
+        return false;
+    }
+
+    Log(L"startup changed source=%ls enabled=0 value=%ls", source,
+        g_autostart_value_name.c_str());
+    return true;
+}
+
 void ShowTrayMenu(HWND hwnd) {
     HMENU menu = CreatePopupMenu();
     if (menu == nullptr) {
@@ -409,6 +514,16 @@ void ShowTrayMenu(HWND hwnd) {
     }
     AppendMenuW(menu, protectionFlags, kCommandToggleProtection,
                 L"Protection enabled");
+
+    bool autostartEnabled = false;
+    std::wstring autostartCommand;
+    QueryAutostart(&autostartEnabled, &autostartCommand);
+    UINT startupFlags = MF_STRING;
+    if (autostartEnabled) {
+        startupFlags |= MF_CHECKED;
+    }
+    AppendMenuW(menu, startupFlags, kCommandToggleStartup,
+                L"Start with Windows");
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, kCommandExit, L"Exit");
 
@@ -426,6 +541,11 @@ void ShowTrayMenu(HWND hwnd) {
         bool enabled = g_query_mode != QueryMode::Block;
         if (!SetProtectionEnabled(hwnd, enabled, L"tray")) {
             MessageBoxW(hwnd, L"SWiT could not change protection state.",
+                        L"SWiT", MB_OK | MB_ICONERROR | MB_TOPMOST);
+        }
+    } else if (command == kCommandToggleStartup) {
+        if (!SetAutostartEnabled(!autostartEnabled, L"tray")) {
+            MessageBoxW(hwnd, L"SWiT could not change its startup setting.",
                         L"SWiT", MB_OK | MB_ICONERROR | MB_TOPMOST);
         }
     } else if (command == kCommandExit) {
@@ -483,6 +603,12 @@ void HandleTestMessage(WPARAM command, LPARAM value) {
         break;
     case SWIT_CONTROL_DISABLE_PROTECTION:
         SetProtectionEnabled(g_window, false, L"swit-send");
+        break;
+    case SWIT_CONTROL_ENABLE_STARTUP:
+        SetAutostartEnabled(true, L"swit-send");
+        break;
+    case SWIT_CONTROL_DISABLE_STARTUP:
+        SetAutostartEnabled(false, L"swit-send");
         break;
     case SWIT_TEST_EXIT:
         Log(L"test requested exit");
@@ -633,6 +759,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
         logPath = DefaultLogPath();
     }
 
+    std::wstring autostartValueName =
+        ArgValue(argc, argv, L"--autostart-value-name");
+    if (!autostartValueName.empty()) {
+        g_autostart_value_name = autostartValueName;
+    }
+
     g_test_mode = HasArg(argc, argv, L"--test-mode");
     bool cancelOnQuery = HasArg(argc, argv, L"--cancel-on-query");
     bool allowOnQuery = HasArg(argc, argv, L"--allow-on-query");
@@ -660,6 +792,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     Log(L"log path=%ls", logPath.c_str());
     Log(L"test mode=%u", g_test_mode ? 1u : 0u);
     Log(L"query mode=%ls", QueryModeName(g_query_mode));
+    bool autostartEnabled = false;
+    std::wstring autostartCommand;
+    if (QueryAutostart(&autostartEnabled, &autostartCommand)) {
+        Log(L"startup setting enabled=%u value=%ls command=%ls",
+            autostartEnabled ? 1u : 0u, g_autostart_value_name.c_str(),
+            autostartCommand.empty() ? L"none" : autostartCommand.c_str());
+    }
 
     g_test_message = RegisterWindowMessageW(SWIT_TEST_MESSAGE_NAME);
     if (g_test_message == 0) {

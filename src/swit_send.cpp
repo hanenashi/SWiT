@@ -26,6 +26,12 @@ unsigned int ParseCommand(const wchar_t* value) {
     if (wcscmp(value, L"disable") == 0) {
         return SWIT_CONTROL_DISABLE_PROTECTION;
     }
+    if (wcscmp(value, L"startup-enable") == 0) {
+        return SWIT_CONTROL_ENABLE_STARTUP;
+    }
+    if (wcscmp(value, L"startup-disable") == 0) {
+        return SWIT_CONTROL_DISABLE_STARTUP;
+    }
     if (wcscmp(value, L"exit") == 0) {
         return SWIT_TEST_EXIT;
     }
@@ -37,7 +43,8 @@ unsigned int ParseCommand(const wchar_t* value) {
 int wmain(int argc, wchar_t** argv) {
     if (argc < 2 || argc > 3) {
         std::wcerr << L"Usage: swit-send [--helper] "
-                      L"<ping|shutdown|restart|logoff|enable|disable|exit>\n";
+                      L"<ping|shutdown|restart|logoff|enable|disable|"
+                      L"startup-enable|startup-disable|exit>\n";
         return 2;
     }
 

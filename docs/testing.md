@@ -85,7 +85,7 @@ scripts\build.bat
 Run:
 
 ```cmd
-build\swit-agent.exe --test-mode --cancel-on-query --log logs\smoke.log
+build\swit-agent.exe --test-mode --cancel-on-query --autostart-value-name SWiT-Test-Smoke --log logs\smoke.log
 build\swit-send.exe ping
 build\swit-send.exe shutdown
 build\swit-send.exe restart
@@ -94,6 +94,8 @@ build\swit-send.exe disable
 build\swit-send.exe shutdown
 build\swit-send.exe enable
 build\swit-send.exe shutdown
+build\swit-send.exe startup-enable
+build\swit-send.exe startup-disable
 build\swit-send.exe exit
 ```
 
@@ -112,6 +114,8 @@ Tests:
 - Allow mode logs `decision=allow` without showing UI.
 - Starting a second agent exits with code 0 and does not create a second log.
 - Disable removes the block reason; enable recreates it.
+- Startup enable writes a quoted executable path to the current-user `Run` key.
+- Startup disable removes only SWiT's named value.
 - `swit-send.exe exit` closes the agent cleanly.
 - Exit removes the tray icon and block reason.
 - Logs are readable while the agent is still running.
@@ -338,15 +342,21 @@ Run these only after the basic path is stable:
 
 ## Recovery Plan
 
-Every build must preserve a way to disable SWiT:
+Every build must preserve a recovery path:
 
-- `build\swit-send.exe exit` during the trayless MVP.
-- Close App from tray menu.
+- `build\swit-send.exe exit` as the CLI exit path.
+- `build\swit-send.exe startup-disable` to remove sign-in startup.
+- Exit from the tray menu.
 - Task Manager process end.
 - Startup entry removal.
 - A documented command or script to disable autostart.
 
-Do not install SWiT as always-on autostart until the recovery path is tested.
+Autostart recovery passed with an isolated registry value on 2026-07-21. Test
+builds should continue using `--autostart-value-name <temporary-name>` so they
+cannot modify the production `SWiT` value.
+
+The restart test also confirmed that autostart remains enabled across an agent
+restart while a temporary runtime protection disable resets safely to enabled.
 
 ## References
 
