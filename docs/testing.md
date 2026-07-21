@@ -13,6 +13,7 @@ Shutdown tests are destructive to the current session. Use this order:
 Before every real shutdown test:
 
 - Save all work.
+- Run SWiT and its helper from a normal, non-elevated terminal.
 - Keep a local console path available, not only SSH or phone control.
 - Make sure the repo has no unsaved editor buffer state.
 - Keep this command ready in an elevated or normal terminal:
@@ -60,6 +61,40 @@ Suggested result states:
 - `FAIL_DANGEROUS`: shutdown happened when cancel was expected.
 - `BLOCKED`: test could not be completed.
 
+## Recorded Results
+
+Kurochan, 2026-07-21, Start-menu shutdown, native-screen build: `PASS`.
+
+- Agent level changed from `0x280` to `0x3FF`.
+- Agent returned `FALSE` for a non-critical query.
+- Windows followed with `WM_ENDSESSION ending=0` about seven seconds later.
+- Default-level helper received no `WM_QUERYENDSESSION`.
+- Codex, Total Commander, and browser audio remained running.
+- No delayed SWiT dialog appeared after returning to the desktop.
+
+Kurochan, 2026-07-21, Start-menu **Shut down anyway** and reboot: `PASS`.
+
+- Agent received a normal query and returned the protected cancel decision.
+- Windows continued after explicit confirmation with
+  `WM_ENDSESSION ending=1` and `ENDSESSION_CRITICAL`.
+- The machine powered off normally.
+- Windows booted at 23:43:15 and the Run entry started SWiT at 23:44:35 after
+  sign-in.
+- The new process restored level `0x3FF`, its blocker reason, and tray icon.
+
+Kurochan, 2026-07-22, `0.1.0-alpha.1` installer lifecycle: `PASS`.
+
+- Per-user install required no elevation.
+- Installed files, Start menu shortcut, uninstall registration, and Run value
+  pointed to `%LOCALAPPDATA%\Programs\SWiT`.
+- Runtime logging moved to `%LOCALAPPDATA%\SWiT\logs\swit-agent.log`.
+- A same-version upgrade preserved an intentionally disabled startup setting.
+- Uninstall stopped the agent and removed the process, Run value, install
+  directory, application-data directory, Start menu group, and uninstall key.
+- A foreign command placed in the `SWiT` Run value survived uninstall; setup
+  removes that value only when it points to the installed SWiT executable.
+- Reinstall restored the packaged agent, autostart, tray icon, and protection.
+
 ## Level 1: No-Shutdown Tests
 
 Goal: test logic without invoking Windows shutdown.
@@ -73,11 +108,17 @@ scripts\build.bat
 Run:
 
 ```cmd
-build\swit-agent.exe --test-mode --cancel-on-query --log logs\smoke.log
+build\swit-agent.exe --test-mode --cancel-on-query --autostart-value-name SWiT-Test-Smoke --log logs\smoke.log
 build\swit-send.exe ping
 build\swit-send.exe shutdown
 build\swit-send.exe restart
 build\swit-send.exe logoff
+build\swit-send.exe disable
+build\swit-send.exe shutdown
+build\swit-send.exe enable
+build\swit-send.exe shutdown
+build\swit-send.exe startup-enable
+build\swit-send.exe startup-disable
 build\swit-send.exe exit
 ```
 
@@ -88,22 +129,26 @@ Tests:
 
 - Start app in `--test-mode`.
 - Verify hidden window is created.
-- Verify tray icon appears.
-- Right-click tray menu opens.
-- Settings dialog opens and saves values.
-- About placeholder opens.
-- Donate placeholder opens.
-- Close App removes tray icon and exits.
+- Verify the tray icon appears, possibly in the overflow area.
+- Verify its menu checkmark follows enable/disable state.
 - Synthetic `WM_APP` test message triggers the same decision function used by
   shutdown handling.
-- Cancel decision returns `CancelShutdown`.
-- Confirm decision returns `AllowShutdown`.
-- Timeout decision follows settings.
+- Block mode logs `decision=cancel` without showing UI.
+- Allow mode logs `decision=allow` without showing UI.
+- Starting a second agent exits with code 0 and does not create a second log.
+- Disable removes the block reason; enable recreates it.
+- Startup enable writes a quoted executable path to the current-user `Run` key.
+- Startup disable removes only SWiT's named value.
+- `swit-send.exe exit` closes the agent cleanly.
+- Exit removes the tray icon and block reason.
+- Logs are readable while the agent is still running.
 
 Pass criteria:
 
 - No real shutdown or logoff occurs.
 - Logs show every decision.
+- `type logs\smoke.log` works while the agent is still running and begins with
+  `[` rather than a UTF-8 BOM artifact.
 
 ## Level 2: Message-Only Harness
 
@@ -123,7 +168,7 @@ Tests:
 Pass criteria:
 
 - Decisions are deterministic.
-- Repeated messages do not spawn stacked dialogs.
+- Repeated messages remain deterministic and do not show UI.
 - Unknown values fall back to the safest configured behavior.
 
 ## Level 3: ShutdownBlockReason Smoke Test
@@ -188,7 +233,7 @@ Preparation:
 Tests:
 
 - Trigger sign out from Start menu.
-- Choose Cancel in SWiT.
+- Choose Cancel in Windows' blocker UI.
 - Confirm the session remains alive.
 - Repeat and choose Allow.
 
@@ -247,7 +292,8 @@ Expected:
 - SWiT receives `WM_QUERYENDSESSION`.
 - The reason flags do not include `ENDSESSION_CRITICAL`.
 - SWiT returns `FALSE`.
-- Windows aborts shutdown.
+- Windows shows its native blocker UI with SWiT's reason.
+- Choosing Cancel aborts shutdown.
 - The helper does not receive `WM_QUERYENDSESSION`.
 - Explorer and desktop remain alive.
 
@@ -280,7 +326,7 @@ Cancel-path test:
 1. Save all work.
 2. Start SWiT with verbose logging.
 3. Use Start -> Power -> Shut down.
-4. Choose Cancel in SWiT.
+4. Choose Cancel in Windows' blocker UI.
 5. Confirm the session remains usable.
 6. Check logs.
 
@@ -289,16 +335,16 @@ Allow-path test:
 1. Save all work.
 2. Start SWiT with verbose logging.
 3. Use Start -> Power -> Shut down.
-4. Choose Shutdown in SWiT.
+4. Choose Shut down anyway in Windows' blocker UI.
 5. Confirm the machine shuts down cleanly.
 
 Pass criteria:
 
-- Start-menu shutdown triggers the same decision path as the scheduled shutdown
-  test.
+- Start-menu shutdown shows SWiT's reason in Windows' blocker UI.
 - Cancel does not require racing `shutdown /a`.
-- Cancel happens before Explorer/desktop black-screen teardown.
-- Confirm does not issue a second shutdown request from SWiT.
+- Cancel preserves Explorer and ordinary applications even though Windows
+  temporarily shows its full-screen shutdown UI.
+- Shut down anyway does not depend on a second shutdown request from SWiT.
 
 ## Level 9: Edge Cases
 
@@ -308,7 +354,7 @@ Run these only after the basic path is stable:
 - Explorer restarted while SWiT is running.
 - SWiT started twice.
 - Settings dialog open when shutdown begins.
-- Confirmation dialog already open and a second shutdown request occurs.
+- A second shutdown request occurs immediately after a canceled request.
 - Remote session attached.
 - Machine locked.
 - Unsaved Notepad window open.
@@ -317,16 +363,48 @@ Run these only after the basic path is stable:
 - Low countdown values: 1, 2, 5 seconds.
 - Invalid settings values.
 
+## Level 10: Installer Validation
+
+Goal: prove that packaging does not leave SWiT unmanageable or change user
+preferences during updates.
+
+Tests:
+
+- Install from a normal, non-elevated account.
+- Confirm the executable, Run entry, Start menu shortcut, and uninstaller all
+  point to `%LOCALAPPDATA%\Programs\SWiT`.
+- Confirm the default log appears under `%LOCALAPPDATA%\SWiT\logs`.
+- Disable **Start with Windows**, install the same or newer version, and verify
+  startup remains disabled.
+- Enable startup again and verify it points to the installed executable.
+- Uninstall while the agent is running.
+- Confirm all SWiT-owned process, file, registry, shortcut, and log state is gone.
+- Reinstall and verify the tray icon and protection return.
+
+Pass criteria:
+
+- Setup and uninstall return exit code zero without elevation.
+- No reboot is required.
+- Upgrade preserves the current startup preference.
+- Uninstall leaves no SWiT-owned state behind.
+
 ## Recovery Plan
 
-Every build must preserve a way to disable SWiT:
+Every build must preserve a recovery path:
 
-- Close App from tray menu.
+- `build\swit-send.exe exit` as the CLI exit path.
+- `build\swit-send.exe startup-disable` to remove sign-in startup.
+- Exit from the tray menu.
 - Task Manager process end.
 - Startup entry removal.
 - A documented command or script to disable autostart.
 
-Do not install SWiT as always-on autostart until the recovery path is tested.
+Autostart recovery passed with an isolated registry value on 2026-07-21. Test
+builds should continue using `--autostart-value-name <temporary-name>` so they
+cannot modify the production `SWiT` value.
+
+The restart test also confirmed that autostart remains enabled across an agent
+restart while a temporary runtime protection disable resets safely to enabled.
 
 ## References
 

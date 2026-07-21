@@ -41,7 +41,7 @@ Tasks:
   `WM_ENDSESSION`. Done.
 - Add a custom registered test message that exercises the same decision path
   without asking Windows to shut down. Done.
-- Add command-line flags. Started:
+- Add command-line flags. Done:
   - `--test-mode`
   - `--allow-on-query`
   - `--cancel-on-query`
@@ -55,8 +55,9 @@ Done when:
   Windows session.
 - Logs are timestamped and readable.
 
-Current status: completed for no-shutdown smoke testing. Real shutdown testing
-still waits for helper-app ordering checks.
+Current status: completed for no-shutdown smoke testing. The early-priority
+veto and native blocker UI have passed a real Start-menu cancel test on
+Kurochan without ordinary applications beginning teardown.
 
 ## Phase 2: Shutdown Decision Core
 
@@ -105,22 +106,29 @@ Goal: restore the original product shape safely.
 
 Tasks:
 
-- Add notification-area icon via `Shell_NotifyIcon`.
+- Add notification-area icon via `Shell_NotifyIcon`. Done.
+- Give the icon a stable GUID so Explorer preserves its identity. Done.
 - Add right-click menu:
+  - Protection enabled/disabled. Done.
+  - Start with Windows. Done.
+  - Exit. Done.
   - Settings
-  - Close App
   - About
   - Donate
 - Add placeholders for About and Donate.
-- Add single-instance guard.
-- Handle Explorer/taskbar restart and recreate the tray icon.
-- Add explicit Close App behavior that removes the tray icon cleanly.
+- Add single-instance guard. Done.
+- Handle Explorer/taskbar restart and recreate the tray icon. Done.
+- Add explicit Exit behavior that removes the tray icon cleanly. Done.
+- Add a custom application/tray icon. Done.
 
 Done when:
 
 - The app lives in the tray.
-- Right-click menu works.
+- Protection toggle and Exit work.
 - Closing the app cannot leave stale UI state behind.
+
+Current status: core tray lifecycle and manual menu interaction passed on
+Kurochan. Settings, About, and Donate remain pending.
 
 ## Phase 4: Settings
 
@@ -128,7 +136,9 @@ Goal: add the controls recovered from the Grok history.
 
 Tasks:
 
-- Add per-user persisted settings.
+- Add per-user persisted settings. Started:
+  - Start with Windows via the current-user `Run` key. Done.
+  - Runtime protection state intentionally resets to enabled at launch. Done.
 - Implement:
   - Shutdown countdown enabled.
   - Shutdown countdown seconds.
@@ -138,6 +148,9 @@ Tasks:
 - Make mutually enabled countdowns deterministic. Pick one policy:
   - one default action radio group, or
   - reject enabling both countdowns.
+
+The old countdown controls require redesign because the MVP now uses Windows'
+native blocker screen rather than a custom shutdown dialog.
 
 Done when:
 
@@ -152,11 +165,10 @@ Tasks:
 
 - Register a short shutdown block reason with `ShutdownBlockReasonCreate`.
 - Set an application-first shutdown level before real shutdown tests.
-- On `WM_QUERYENDSESSION`, show confirmation only when safe.
-- Return `FALSE` for cancel.
-- Return `TRUE` for confirm and let the original shutdown continue.
+- On `WM_QUERYENDSESSION`, return `FALSE` immediately. Done.
+- Use Windows' native blocker screen for **Shut down anyway / Cancel**. Done.
 - Handle `WM_ENDSESSION` only for cleanup/logging.
-- Never call `ExitWindowsEx` from inside the normal confirm path.
+- Never call `ExitWindowsEx` from the query handler.
 
 Done when:
 
@@ -167,6 +179,11 @@ Done when:
 - Explorer and ordinary test apps remain open after a cancel decision.
 - Logs clearly show query, decision, and end-session results.
 
+Current status: protected cancel and force-through paths passed. Choosing
+**Shut down anyway** produced `WM_ENDSESSION ending=1` with
+`ENDSESSION_CRITICAL`, powered off Kurochan, and did not launch a second
+shutdown request.
+
 ## Phase 6: Start Menu Validation
 
 Goal: verify the real target workflow.
@@ -174,17 +191,20 @@ Goal: verify the real target workflow.
 Tasks:
 
 - Test Start -> Power -> Shut down manually.
-- Test cancel.
-- Test confirm.
+- Test cancel. Done.
+- Test confirm. Done.
 - Test restart and logoff separately.
 - Test while common apps have unsaved work.
 - Test from both local console and remote-control workflow.
 
 Done when:
 
-- Start-menu shutdown produces the intended SWiT prompt.
-- Cancel keeps the Windows session alive.
-- Confirm proceeds without launching a second shutdown request.
+- Start-menu shutdown produces the Windows blocker screen with SWiT's reason.
+- Cancel keeps the Windows session and ordinary applications alive. Done.
+- Shut down anyway proceeds without SWiT launching a second request.
+
+Current status: Start-menu cancel and confirm are complete. The subsequent
+sign-in also confirmed automatic startup from the per-user Run entry.
 
 ## Phase 7: Packaging
 
@@ -192,11 +212,20 @@ Goal: make SWiT easy to install and remove.
 
 Tasks:
 
-- Add autostart at sign-in.
-- Add uninstall/disable path.
-- Decide between zip, installer, or simple setup script.
-- Document recovery command to disable SWiT if it misbehaves.
+- Add optional autostart at sign-in. Done.
+- Add uninstall/disable path. Done.
+- Decide between zip, installer, or simple setup script. Done: Inno Setup 7.
+- Install per-user without elevation. Done.
+- Use stable install and per-user log paths. Done.
+- Add version metadata, application icon, and release checksums. Done.
+- Preserve the startup preference across upgrades. Done.
+- Add reproducible local and GitHub Actions release builds. Done.
+- Document recovery command to disable SWiT if it misbehaves. Done.
 
 Done when:
 
 - A clean Windows account can install, run, disable, and uninstall SWiT.
+
+Current status: the full install, same-version upgrade, startup-preservation,
+uninstall-cleanup, and reinstall cycle passed on Kurochan. Validation on a
+second clean Windows account or machine remains before a public release.

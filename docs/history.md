@@ -108,6 +108,49 @@ Key Win32 facts:
 - Notification-area icons are implemented with `Shell_NotifyIcon` and
   `NOTIFYICONDATA`; Windows may put icons in the overflow area by default.
 
+## Known Working Legacy Blocker
+
+The user reconfirmed that
+`archive/2026-07-21-pre-restart/ LAST/swit.exe` prevents final shutdown on
+Windows 11, but only after Codex, Total Commander, Explorer, and the desktop
+have already begun quitting. Its SHA-256 is
+`AAF72758A378E40E47DBCB5332083CFF74DC83D4A3D454F79D588AA9D6919510`.
+
+The executable was built from the adjacent `swit.cpp`. It owns a hidden
+top-level window, handles `WM_QUERYENDSESSION`, shows a modal `MessageBox`, and
+returns `FALSE`. It does not call `SetProcessShutdownParameters`, so it remains
+at the ordinary `0x280` shutdown level. The clean agent reuses only the veto
+behavior at level `0x3FF`; it does not rely on or launch the archived binary.
+
+The legacy confirm path calls `ExitWindowsEx(EWX_SHUTDOWN | EWX_FORCE, ...)`.
+That creates a second forced shutdown request, so it must not be copied into the
+clean implementation.
+
+## First Early-Veto Result
+
+The 2026-07-21 Start-menu test on Kurochan proved that shutdown ordering works:
+
+- SWiT received the query at level `0x3FF`.
+- The helper at default level `0x280` received no query.
+- Codex and Total Commander remained running.
+- Windows displayed its full-screen blocker UI with SWiT's reason.
+- The modal SWiT dialog was hidden until the Windows UI canceled shutdown and
+  returned to the desktop.
+
+This changed the MVP design. SWiT now returns `FALSE` immediately and treats
+Windows' blocker UI as the confirmation surface.
+
+The revised native-screen build passed a second Start-menu test at 22:25:
+
+- SWiT logged the query at `22:25:28.443` and returned `FALSE` immediately.
+- Windows reported `WM_ENDSESSION ending=0` at `22:25:35.326`.
+- The native shutdown screen presented its choices without the previous late
+  SWiT dialog.
+- The `0x280` helper received no shutdown query.
+- Codex, Total Commander, and browser audio remained running.
+
+This is the first complete acceptance pass for the protected cancel path.
+
 ## Restart Requirements To Preserve
 
 Minimum useful v1:
@@ -115,9 +158,9 @@ Minimum useful v1:
 - Per-user tray app.
 - Hidden top-level window.
 - Handles `WM_QUERYENDSESSION`.
-- Shows confirmation prompt for Start-menu shutdown.
-- Cancel path returns `FALSE`.
-- Confirm path returns `TRUE` and lets the original shutdown continue.
+- Registers a clear shutdown block reason.
+- Returns `FALSE` immediately at application-first shutdown priority.
+- Uses Windows' native blocker UI for confirmation.
 - Tray right-click menu with Settings, Close App, About, Donate.
 - Settings persist per user.
 

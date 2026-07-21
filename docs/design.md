@@ -17,16 +17,19 @@ Start -> Power -> Shut down, and ask the interactive user to confirm.
 Build a per-user Win32 app:
 
 1. Start at user sign-in.
-2. Create a hidden top-level window.
-3. Run a standard message loop.
-4. Call `SetProcessShutdownParameters` with an application-first shutdown
+2. Acquire a per-session single-instance mutex.
+3. Create a hidden top-level window.
+4. Run a standard message loop.
+5. Add a GUID-identified notification icon and restore it after Explorer
+   restarts.
+6. Call `SetProcessShutdownParameters` with an application-first shutdown
    level so SWiT is queried before Explorer and ordinary apps.
-5. Handle `WM_QUERYENDSESSION`.
-6. If protection is enabled:
-   - call `ShutdownBlockReasonCreate`;
-   - show a short confirmation prompt if Windows still permits UI;
-   - return `FALSE` when the user cancels or does not explicitly confirm.
-7. Handle `WM_ENDSESSION` for cleanup and logging.
+7. Handle `WM_QUERYENDSESSION`.
+8. If protection is enabled:
+   - register a clear reason with `ShutdownBlockReasonCreate`;
+   - return `FALSE` immediately;
+   - let Windows show its native **Shut down anyway / Cancel** screen.
+9. Handle `WM_ENDSESSION` for cleanup and logging.
 
 This should catch the normal Start menu shutdown path because that path asks
 Windows to end the session, which broadcasts `WM_QUERYENDSESSION` to GUI apps
@@ -41,12 +44,30 @@ shutdown test ladder, and `docs/knowledgebase.md` for the shutdown model.
 - Should cancel be the default on timeout?
 - Should confirmation text distinguish shutdown, restart, and logoff when
   Windows exposes enough detail?
-- Should there be a tray icon for temporary disable?
-- Should settings live in the registry, a local config file, or both?
+- Should future settings beyond autostart live in the registry, a local config
+  file, or both?
 - Should logs go to a text file, Event Log, or DebugView only?
 - Which application-first shutdown level should SWiT use? Start with `0x3FF`
   in test builds, because ordinary apps default to `0x280` and Windows shuts
   higher levels down first.
+
+## Persisted State
+
+`Start with Windows` is stored as the `SWiT` value under the current user's
+`Software\Microsoft\Windows\CurrentVersion\Run` key. It points to the current
+agent executable and requires no elevation.
+
+The runtime protection toggle is not persisted. Every process launch starts in
+protected mode unless an explicit diagnostic command-line flag says otherwise.
+
+The installed executable lives under `%LOCALAPPDATA%\Programs\SWiT`. Runtime
+logs live separately under `%LOCALAPPDATA%\SWiT\logs`, so upgrades do not need
+to write beside the executable and uninstall can remove application data
+explicitly.
+
+Debug and release builds use separate notification-icon GUIDs. Windows binds a
+GUID icon to the full executable path that first registers it, so this prevents
+a local development build from claiming the installed application's identity.
 
 ## Legacy Experiments
 
@@ -58,12 +79,19 @@ source experiments are archived under `archive/2026-07-21-pre-restart/`.
 The old `swit.cpp` approach is closest to the clean design. It already uses a
 hidden window, `WM_QUERYENDSESSION`, and `WTSRegisterSessionNotification`.
 
+The clean agent reuses the legacy veto mechanism at shutdown level `0x3FF`, but
+does not reuse its modal confirmation or run the legacy binary as a second
+blocker.
+
 Problems to revisit:
 
 - It calls `ExitWindowsEx` after confirmation, which may create a second
   shutdown request instead of simply allowing the original one to continue.
-- It uses a modal `MessageBox` directly inside the shutdown query handler.
-- It needs clearer timeout and fallback behavior.
+  The clean agent never starts a second shutdown request.
+- A modal `MessageBox` inside `WM_QUERYENDSESSION` was tested on 2026-07-21. It
+  remained hidden behind Windows' shutdown UI and became visible only after the
+  session had already been canceled.
+- The clean agent therefore responds immediately and uses Windows' blocker UI.
 
 ### Service Plus GUI
 

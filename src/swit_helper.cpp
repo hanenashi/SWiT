@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cwchar>
+#include <share.h>
 #include <string>
 
 #include "swit_protocol.h"
@@ -58,14 +59,25 @@ void Log(const wchar_t* format, ...) {
         return;
     }
 
-    fwprintf(g_log, L"[%ls] ", NowText().c_str());
-
+    wchar_t message[2048]{};
     va_list args;
     va_start(args, format);
-    vfwprintf(g_log, format, args);
+    _vsnwprintf_s(message, _countof(message), _TRUNCATE, format, args);
     va_end(args);
 
-    fwprintf(g_log, L"\n");
+    std::wstring line = L"[" + NowText() + L"] " + message + L"\r\n";
+    int byteCount = WideCharToMultiByte(CP_UTF8, 0, line.c_str(),
+                                        static_cast<int>(line.size()), nullptr,
+                                        0, nullptr, nullptr);
+    if (byteCount <= 0) {
+        return;
+    }
+
+    std::string utf8(static_cast<size_t>(byteCount), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, line.c_str(),
+                        static_cast<int>(line.size()), &utf8[0], byteCount,
+                        nullptr, nullptr);
+    fwrite(utf8.data(), 1, utf8.size(), g_log);
     fflush(g_log);
 }
 
@@ -98,8 +110,8 @@ std::wstring DefaultLogPath() {
 
 bool OpenLog(const std::wstring& path) {
     EnsureParentDirectory(path);
-    errno_t err = _wfopen_s(&g_log, path.c_str(), L"a, ccs=UTF-8");
-    return err == 0 && g_log != nullptr;
+    g_log = _wfsopen(path.c_str(), L"ab", _SH_DENYWR);
+    return g_log != nullptr;
 }
 
 std::wstring ArgValue(int argc, wchar_t** argv, const wchar_t* name) {

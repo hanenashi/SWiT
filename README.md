@@ -6,35 +6,34 @@ The intended behavior is:
 
 1. The user clicks **Start -> Power -> Shut down**.
 2. Windows begins ending the interactive session.
-3. SWiT receives the shutdown query in the logged-in user's session.
-4. SWiT asks for confirmation.
-5. If the user cancels, SWiT cancels the shutdown.
-6. If the user confirms, SWiT allows Windows to continue shutting down.
+3. SWiT receives the shutdown query before ordinary applications.
+4. SWiT immediately blocks the request with a clear reason.
+5. Windows shows its native **Shut down anyway / Cancel** screen.
+6. Cancel preserves the session; Shut down anyway continues forcefully.
 
 ## Current Status
 
-This repository is being restarted. The existing files include several early
-experiments:
-
-- A hidden-window app that handles `WM_QUERYENDSESSION`.
-- A Windows service that attempts to handle preshutdown and launch a GUI prompt.
-- A hook DLL experiment that tries to intercept Start menu or shell messages.
-
-Those experiments are archived under `archive/2026-07-21-pre-restart/` as
-research material. The clean implementation should be built around a normal
-per-user background app with a hidden top-level window and message loop.
+The clean implementation now has a per-user agent, an application-first
+shutdown level, a native Windows confirmation flow, logging, and synthetic test
+tools. It also enforces a single instance and provides a notification-area icon
+for enabling/disabling protection or exiting. A per-user Windows installer now
+provides a stable install location, sign-in startup, Start menu shortcuts, and
+complete uninstall. The older hidden-window, service, and hook experiments remain archived under
+`archive/2026-07-21-pre-restart/` as research material.
 
 ## Design Direction
 
 Preferred architecture:
 
 - `swit-agent.exe`: per-user background process started at sign-in.
-- Hidden message-only/control window for shutdown notifications.
+- Hidden top-level window for shutdown notifications.
 - `WM_QUERYENDSESSION` handler decides whether to block the shutdown.
 - `ShutdownBlockReasonCreate` provides the visible reason Windows shows when
   shutdown is blocked.
-- A small foreground confirmation dialog is used when practical.
-- Optional tray icon later for settings, enable/disable, and logs.
+- Windows' full-screen blocker UI is the confirmation surface.
+- Notification-area icon with protection toggle and clean Exit command.
+- Per-user install under `%LOCALAPPDATA%\Programs\SWiT` without elevation.
+- Runtime logs under `%LOCALAPPDATA%\SWiT\logs`.
 
 Avoid as the primary design:
 
@@ -70,10 +69,12 @@ Expected developer shell:
 x64 Native Tools Command Prompt for VS
 ```
 
-From a normal shell, the build script will load the VS 2022 x64 toolchain:
+From a normal shell, the build script discovers and loads the VS 2022 x64
+toolchain:
 
 ```cmd
 scripts\build.bat
+scripts\build.bat release
 ```
 
 Outputs:
@@ -84,6 +85,35 @@ build\swit-send.exe
 build\swit-helper.exe
 ```
 
+The default configuration is a debug build. Release builds are optimized,
+use the static C++ runtime, and embed SWiT's icon and version metadata.
+
+## Installer
+
+Install the pinned, verified Inno Setup compiler once, then build a release:
+
+```powershell
+.\scripts\install-inno.ps1
+.\scripts\build-release.ps1
+```
+
+Outputs:
+
+```text
+dist\SWiT-Setup-0.1.0-alpha.1-x64.exe
+dist\SHA256SUMS.txt
+```
+
+The installer targets Windows 11 x64-compatible systems, installs only for the
+current user, requires no administrator rights, and offers sign-in startup
+selected by default on first install. Upgrades preserve the user's existing
+startup choice. Uninstall stops the agent and removes SWiT's files, startup
+entry, shortcuts, and logs.
+
+The current alpha installer is not Authenticode-signed, so Windows SmartScreen
+may warn. `scripts\build-release.ps1` supports signing when a code-signing
+certificate thumbprint is supplied. See `docs\packaging.md`.
+
 Run the no-shutdown smoke harness from the repository root:
 
 ```cmd
@@ -92,8 +122,45 @@ build\swit-send.exe ping
 build\swit-send.exe shutdown
 build\swit-send.exe restart
 build\swit-send.exe logoff
+build\swit-send.exe disable
+build\swit-send.exe shutdown
+build\swit-send.exe enable
+build\swit-send.exe shutdown
 build\swit-send.exe exit
 ```
+
+Normal startup blocks shutdown and relies on Windows' native confirmation UI.
+`--cancel-on-query` explicitly selects the same behavior, while
+`--allow-on-query` is a diagnostic mode. `swit-send.exe` remains available as a
+CLI alternative to the tray controls.
+
+Run SWiT as the signed-in user, not from an elevated terminal. Elevation is not
+required and prevents a normal `swit-send.exe` process from controlling it.
+
+The notification icon may initially appear in Windows' tray overflow. Its menu
+contains **Protection enabled**, **Start with Windows**, and **Exit**. The same
+controls are available from a terminal:
+
+```cmd
+build\swit-send.exe disable
+build\swit-send.exe enable
+build\swit-send.exe startup-enable
+build\swit-send.exe startup-disable
+build\swit-send.exe exit
+```
+
+The startup preference is persisted in the current user's Windows `Run` key.
+The protection toggle is intentionally not persisted: every fresh SWiT process
+starts protected.
+
+Without `--log`, logs are written to:
+
+```text
+%LOCALAPPDATA%\SWiT\logs\swit-agent.log
+```
+
+Starting `swit-agent.exe` again in the same user session exits immediately and
+leaves the existing agent untouched.
 
 If you start the executables from inside `build\`, use `swit-send.exe` directly
 and pass an absolute or `..\logs\...` log path if you want logs under the repo
@@ -126,3 +193,4 @@ local Codex session search.
 - `docs/design.md`: technical design notes.
 - `docs/knowledgebase.md`: Windows shutdown model notes relevant to SWiT.
 - `docs/history.md`: recovered history from old AI chats and experiments.
+- `docs/packaging.md`: installer, release, signing, and distribution notes.

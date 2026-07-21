@@ -27,9 +27,9 @@ For SWiT, that means:
 - The process must request an early application shutdown level with
   `SetProcessShutdownParameters`, otherwise Explorer and other apps may receive
   shutdown messages before SWiT and start closing before SWiT cancels.
-- The confirmation decision belongs in the `WM_QUERYENDSESSION` path.
-- The cancel path returns `FALSE`.
-- The allow path returns `TRUE` and lets the original shutdown continue.
+- The block decision belongs in the `WM_QUERYENDSESSION` path and must be fast.
+- The protected path returns `FALSE` immediately.
+- Windows' blocker UI provides the continue/cancel decision to the user.
 - `WM_ENDSESSION` is for logs and cleanup only.
 - Calling `ExitWindowsEx` from the confirm path is usually wrong because it
   creates a second shutdown request instead of allowing the original request.
@@ -114,6 +114,25 @@ This addresses the main failure mode seen in the old SWiT experiments: shutdown
 was technically canceled, but Explorer/desktop and other quit-ready apps had
 already started closing first. A late veto is not good enough; SWiT needs an
 early veto.
+
+SWiT cannot tell another process such as Codex or Total Commander to ignore its
+own shutdown query. Protection comes from ordering: SWiT must receive and veto
+the request before Windows reaches those ordinary applications. A watchdog
+could relaunch an application after a failed veto, but it cannot restore
+unsaved in-memory state and is not a substitute for the early veto.
+
+On 2026-07-21, the installed Codex `26.715.8383.0` build's `ChatGPT.exe` import
+table included `SetProcessShutdownParameters`. An import does not reveal the
+runtime level, so the real ordering test remains authoritative. Upstream
+Chromium leaves its main browser process at `0x280` and moves non-browser child
+processes to `0x27F`, both later than SWiT's `0x3FF`:
+https://chromium.googlesource.com/chromium/src/+/master/chrome/app/main_dll_loader_win.cc
+
+The 2026-07-21 Kurochan test confirmed the ordering in practice. SWiT at
+`0x3FF` received the query, while the helper at `0x280` received no
+`WM_QUERYENDSESSION`; Codex and Total Commander remained open. A modal prompt
+inside the query handler was hidden behind the Windows shutdown screen and was
+removed from the design.
 
 ## Power-Off Is Too Late
 
