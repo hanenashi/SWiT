@@ -4,7 +4,9 @@
 
 # Build outputs
 build/
+dist/
 logs/
+tmp/
 *.exe
 *.dll
 *.obj

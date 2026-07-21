@@ -1,5 +1,6 @@
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
 
 #include <cstdio>
 #include <cwchar>
@@ -7,6 +8,7 @@
 #include <string>
 
 #include "swit_protocol.h"
+#include "swit_resources.h"
 
 namespace {
 
@@ -23,12 +25,23 @@ constexpr UINT_PTR kTrayRetryTimerId = 1;
 constexpr UINT kCommandToggleProtection = 1001;
 constexpr UINT kCommandToggleStartup = 1002;
 constexpr UINT kCommandExit = 1003;
+// Windows binds GUID-based tray identities to the executable path. Keep the
+// development identity separate so local builds cannot claim the installed app.
+#ifdef NDEBUG
+constexpr GUID kTrayIconGuid = {
+    0x0168a881,
+    0x7b8e,
+    0x48f3,
+    {0xb0, 0x5c, 0xa4, 0x9c, 0xf5, 0xda, 0x59, 0x96},
+};
+#else
 constexpr GUID kTrayIconGuid = {
     0x36d382d2,
     0x33f4,
     0x4b12,
     {0xad, 0xbb, 0x61, 0x80, 0x4a, 0xee, 0x21, 0x26},
 };
+#endif
 
 HINSTANCE g_instance = nullptr;
 HWND g_window = nullptr;
@@ -121,14 +134,19 @@ void Log(const wchar_t* format, ...) {
 }
 
 std::wstring DefaultLogPath() {
-    wchar_t module[MAX_PATH]{};
-    GetModuleFileNameW(nullptr, module, MAX_PATH);
-    std::wstring path = module;
-    size_t slash = path.find_last_of(L"\\/");
-    if (slash != std::wstring::npos) {
-        path.resize(slash);
+    PWSTR localAppData = nullptr;
+    HRESULT result = SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_DEFAULT,
+                                          nullptr, &localAppData);
+    if (FAILED(result) || localAppData == nullptr) {
+        if (localAppData != nullptr) {
+            CoTaskMemFree(localAppData);
+        }
+        return {};
     }
-    path += L"\\..\\logs\\swit-agent.log";
+
+    std::wstring path = localAppData;
+    CoTaskMemFree(localAppData);
+    path += L"\\SWiT\\logs\\swit-agent.log";
     return path;
 }
 
@@ -143,11 +161,9 @@ bool EnsureParentDirectory(const std::wstring& path) {
         return true;
     }
 
-    if (CreateDirectoryW(dir.c_str(), nullptr) || GetLastError() == ERROR_ALREADY_EXISTS) {
-        return true;
-    }
-
-    return false;
+    int result = SHCreateDirectoryExW(nullptr, dir.c_str(), nullptr);
+    return result == ERROR_SUCCESS || result == ERROR_FILE_EXISTS ||
+           result == ERROR_ALREADY_EXISTS;
 }
 
 bool OpenLog(const std::wstring& path) {
@@ -291,8 +307,14 @@ bool DestroyShutdownBlockReason(HWND hwnd) {
 }
 
 HICON LoadTrayIcon() {
-    LPCWSTR iconId = g_query_mode == QueryMode::Block ? IDI_SHIELD : IDI_WARNING;
-    HICON icon = LoadIconW(nullptr, iconId);
+    HICON icon = nullptr;
+    if (g_query_mode == QueryMode::Block) {
+        icon = static_cast<HICON>(LoadImageW(
+            g_instance, MAKEINTRESOURCEW(IDI_SWIT_ICON), IMAGE_ICON, 0, 0,
+            LR_DEFAULTSIZE | LR_SHARED));
+    } else {
+        icon = LoadIconW(nullptr, IDI_WARNING);
+    }
     if (icon == nullptr) {
         icon = LoadIconW(nullptr, IDI_APPLICATION);
     }

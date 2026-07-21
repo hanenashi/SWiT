@@ -60,6 +60,15 @@ agent executable and requires no elevation.
 The runtime protection toggle is not persisted. Every process launch starts in
 protected mode unless an explicit diagnostic command-line flag says otherwise.
 
+The installed executable lives under `%LOCALAPPDATA%\Programs\SWiT`. Runtime
+logs live separately under `%LOCALAPPDATA%\SWiT\logs`, so upgrades do not need
+to write beside the executable and uninstall can remove application data
+explicitly.
+
+Debug and release builds use separate notification-icon GUIDs. Windows binds a
+GUID icon to the full executable path that first registers it, so this prevents
+a local development build from claiming the installed application's identity.
+
 ## Legacy Experiments
 
 Recovered product and AI-chat history is captured in `docs/history.md`. Legacy

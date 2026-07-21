@@ -16,8 +16,9 @@ The intended behavior is:
 The clean implementation now has a per-user agent, an application-first
 shutdown level, a native Windows confirmation flow, logging, and synthetic test
 tools. It also enforces a single instance and provides a notification-area icon
-for enabling/disabling protection or exiting. The older hidden-window, service,
-and hook experiments remain archived under
+for enabling/disabling protection or exiting. A per-user Windows installer now
+provides a stable install location, sign-in startup, Start menu shortcuts, and
+complete uninstall. The older hidden-window, service, and hook experiments remain archived under
 `archive/2026-07-21-pre-restart/` as research material.
 
 ## Design Direction
@@ -31,6 +32,8 @@ Preferred architecture:
   shutdown is blocked.
 - Windows' full-screen blocker UI is the confirmation surface.
 - Notification-area icon with protection toggle and clean Exit command.
+- Per-user install under `%LOCALAPPDATA%\Programs\SWiT` without elevation.
+- Runtime logs under `%LOCALAPPDATA%\SWiT\logs`.
 
 Avoid as the primary design:
 
@@ -66,10 +69,12 @@ Expected developer shell:
 x64 Native Tools Command Prompt for VS
 ```
 
-From a normal shell, the build script will load the VS 2022 x64 toolchain:
+From a normal shell, the build script discovers and loads the VS 2022 x64
+toolchain:
 
 ```cmd
 scripts\build.bat
+scripts\build.bat release
 ```
 
 Outputs:
@@ -79,6 +84,35 @@ build\swit-agent.exe
 build\swit-send.exe
 build\swit-helper.exe
 ```
+
+The default configuration is a debug build. Release builds are optimized,
+use the static C++ runtime, and embed SWiT's icon and version metadata.
+
+## Installer
+
+Install the pinned, verified Inno Setup compiler once, then build a release:
+
+```powershell
+.\scripts\install-inno.ps1
+.\scripts\build-release.ps1
+```
+
+Outputs:
+
+```text
+dist\SWiT-Setup-0.1.0-alpha.1-x64.exe
+dist\SHA256SUMS.txt
+```
+
+The installer targets Windows 11 x64-compatible systems, installs only for the
+current user, requires no administrator rights, and offers sign-in startup
+selected by default on first install. Upgrades preserve the user's existing
+startup choice. Uninstall stops the agent and removes SWiT's files, startup
+entry, shortcuts, and logs.
+
+The current alpha installer is not Authenticode-signed, so Windows SmartScreen
+may warn. `scripts\build-release.ps1` supports signing when a code-signing
+certificate thumbprint is supplied. See `docs\packaging.md`.
 
 Run the no-shutdown smoke harness from the repository root:
 
@@ -119,6 +153,12 @@ The startup preference is persisted in the current user's Windows `Run` key.
 The protection toggle is intentionally not persisted: every fresh SWiT process
 starts protected.
 
+Without `--log`, logs are written to:
+
+```text
+%LOCALAPPDATA%\SWiT\logs\swit-agent.log
+```
+
 Starting `swit-agent.exe` again in the same user session exits immediately and
 leaves the existing agent untouched.
 
@@ -153,3 +193,4 @@ local Codex session search.
 - `docs/design.md`: technical design notes.
 - `docs/knowledgebase.md`: Windows shutdown model notes relevant to SWiT.
 - `docs/history.md`: recovered history from old AI chats and experiments.
+- `docs/packaging.md`: installer, release, signing, and distribution notes.

@@ -72,6 +72,29 @@ Kurochan, 2026-07-21, Start-menu shutdown, native-screen build: `PASS`.
 - Codex, Total Commander, and browser audio remained running.
 - No delayed SWiT dialog appeared after returning to the desktop.
 
+Kurochan, 2026-07-21, Start-menu **Shut down anyway** and reboot: `PASS`.
+
+- Agent received a normal query and returned the protected cancel decision.
+- Windows continued after explicit confirmation with
+  `WM_ENDSESSION ending=1` and `ENDSESSION_CRITICAL`.
+- The machine powered off normally.
+- Windows booted at 23:43:15 and the Run entry started SWiT at 23:44:35 after
+  sign-in.
+- The new process restored level `0x3FF`, its blocker reason, and tray icon.
+
+Kurochan, 2026-07-22, `0.1.0-alpha.1` installer lifecycle: `PASS`.
+
+- Per-user install required no elevation.
+- Installed files, Start menu shortcut, uninstall registration, and Run value
+  pointed to `%LOCALAPPDATA%\Programs\SWiT`.
+- Runtime logging moved to `%LOCALAPPDATA%\SWiT\logs\swit-agent.log`.
+- A same-version upgrade preserved an intentionally disabled startup setting.
+- Uninstall stopped the agent and removed the process, Run value, install
+  directory, application-data directory, Start menu group, and uninstall key.
+- A foreign command placed in the `SWiT` Run value survived uninstall; setup
+  removes that value only when it points to the installed SWiT executable.
+- Reinstall restored the packaged agent, autostart, tray icon, and protection.
+
 ## Level 1: No-Shutdown Tests
 
 Goal: test logic without invoking Windows shutdown.
@@ -339,6 +362,31 @@ Run these only after the basic path is stable:
 - A helper app that logs `WM_QUERYENDSESSION` at later shutdown level.
 - Low countdown values: 1, 2, 5 seconds.
 - Invalid settings values.
+
+## Level 10: Installer Validation
+
+Goal: prove that packaging does not leave SWiT unmanageable or change user
+preferences during updates.
+
+Tests:
+
+- Install from a normal, non-elevated account.
+- Confirm the executable, Run entry, Start menu shortcut, and uninstaller all
+  point to `%LOCALAPPDATA%\Programs\SWiT`.
+- Confirm the default log appears under `%LOCALAPPDATA%\SWiT\logs`.
+- Disable **Start with Windows**, install the same or newer version, and verify
+  startup remains disabled.
+- Enable startup again and verify it points to the installed executable.
+- Uninstall while the agent is running.
+- Confirm all SWiT-owned process, file, registry, shortcut, and log state is gone.
+- Reinstall and verify the tray icon and protection return.
+
+Pass criteria:
+
+- Setup and uninstall return exit code zero without elevation.
+- No reboot is required.
+- Upgrade preserves the current startup preference.
+- Uninstall leaves no SWiT-owned state behind.
 
 ## Recovery Plan
 

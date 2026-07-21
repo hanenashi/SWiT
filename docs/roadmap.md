@@ -119,6 +119,7 @@ Tasks:
 - Add single-instance guard. Done.
 - Handle Explorer/taskbar restart and recreate the tray icon. Done.
 - Add explicit Exit behavior that removes the tray icon cleanly. Done.
+- Add a custom application/tray icon. Done.
 
 Done when:
 
@@ -126,9 +127,8 @@ Done when:
 - Protection toggle and Exit work.
 - Closing the app cannot leave stale UI state behind.
 
-Current status: core tray lifecycle implemented and automatically tested;
-manual menu interaction remains to be checked on Kurochan. Settings, About,
-Donate, and a custom icon remain pending.
+Current status: core tray lifecycle and manual menu interaction passed on
+Kurochan. Settings, About, and Donate remain pending.
 
 ## Phase 4: Settings
 
@@ -179,8 +179,10 @@ Done when:
 - Explorer and ordinary test apps remain open after a cancel decision.
 - Logs clearly show query, decision, and end-session results.
 
-Current status: protected cancel path complete. The allow/force-through path
-remains intentionally untested because it shuts down the machine.
+Current status: protected cancel and force-through paths passed. Choosing
+**Shut down anyway** produced `WM_ENDSESSION ending=1` with
+`ENDSESSION_CRITICAL`, powered off Kurochan, and did not launch a second
+shutdown request.
 
 ## Phase 6: Start Menu Validation
 
@@ -190,7 +192,7 @@ Tasks:
 
 - Test Start -> Power -> Shut down manually.
 - Test cancel. Done.
-- Test confirm.
+- Test confirm. Done.
 - Test restart and logoff separately.
 - Test while common apps have unsaved work.
 - Test from both local console and remote-control workflow.
@@ -201,17 +203,29 @@ Done when:
 - Cancel keeps the Windows session and ordinary applications alive. Done.
 - Shut down anyway proceeds without SWiT launching a second request.
 
+Current status: Start-menu cancel and confirm are complete. The subsequent
+sign-in also confirmed automatic startup from the per-user Run entry.
+
 ## Phase 7: Packaging
 
 Goal: make SWiT easy to install and remove.
 
 Tasks:
 
-- Add optional autostart at sign-in. Done for development builds.
-- Add uninstall/disable path.
-- Decide between zip, installer, or simple setup script.
-- Document recovery command to disable SWiT if it misbehaves.
+- Add optional autostart at sign-in. Done.
+- Add uninstall/disable path. Done.
+- Decide between zip, installer, or simple setup script. Done: Inno Setup 7.
+- Install per-user without elevation. Done.
+- Use stable install and per-user log paths. Done.
+- Add version metadata, application icon, and release checksums. Done.
+- Preserve the startup preference across upgrades. Done.
+- Add reproducible local and GitHub Actions release builds. Done.
+- Document recovery command to disable SWiT if it misbehaves. Done.
 
 Done when:
 
 - A clean Windows account can install, run, disable, and uninstall SWiT.
+
+Current status: the full install, same-version upgrade, startup-preservation,
+uninstall-cleanup, and reinstall cycle passed on Kurochan. Validation on a
+second clean Windows account or machine remains before a public release.
