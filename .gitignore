@@ -1,0 +1,30 @@
+# Visual Studio and local editor state
+.vs/
+.vscode/
+
+# Build outputs
+*.exe
+*.dll
+*.obj
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.res
+
+# Archives and local logs
+*.zip
+*.log
+swit_log.txt
+
+# Local archives can contain ignored generated binaries and logs.
+archive/**/*.exe
+archive/**/*.dll
+archive/**/*.obj
+archive/**/*.lib
+archive/**/*.exp
+archive/**/*.pdb
+archive/**/*.ilk
+archive/**/*.zip
+archive/**/*.log
+archive/**/swit_log.txt
