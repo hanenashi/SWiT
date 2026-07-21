@@ -6,6 +6,8 @@
 - Legacy repo material archived under `archive/2026-07-21-pre-restart/`.
 - Grok shared conversation:
   `https://grok.com/share/bGVnYWN5_9f8d2a81-c292-43ef-9cc0-1aa405683f76`
+- Archived Overclock.net shutdown explainer:
+  `https://web.archive.org/web/20211122222438/https://www.overclock.net/threads/windows-the-startup-and-shutdown-process.1453560`
 - Microsoft Win32 shutdown and notification-area documentation.
 
 ## Local Codex History

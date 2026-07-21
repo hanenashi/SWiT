@@ -30,8 +30,8 @@ This should catch the normal Start menu shutdown path because that path asks
 Windows to end the session, which broadcasts `WM_QUERYENDSESSION` to GUI apps
 with windows/message queues.
 
-See `docs/roadmap.md` for implementation phases and `docs/testing.md` for the
-shutdown test ladder.
+See `docs/roadmap.md` for implementation phases, `docs/testing.md` for the
+shutdown test ladder, and `docs/knowledgebase.md` for the shutdown model.
 
 ## Open Questions
 

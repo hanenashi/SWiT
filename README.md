@@ -91,4 +91,5 @@ local Codex session search.
 - `docs/roadmap.md`: phased rebuild plan.
 - `docs/testing.md`: shutdown-safe test battleplan.
 - `docs/design.md`: technical design notes.
+- `docs/knowledgebase.md`: Windows shutdown model notes relevant to SWiT.
 - `docs/history.md`: recovered history from old AI chats and experiments.
